@@ -9,6 +9,7 @@ using System.IO;
 using System.Linq;
 using System.Net;
 using System.Net.WebSockets;
+using System.Security.Claims;
 using System.Security.Cryptography.X509Certificates;
 using System.Security.Principal;
 using System.Threading;
@@ -36,11 +37,11 @@ namespace Microsoft.AspNet.Owin
 
         public OwinEnvironment(HttpContext context)
         {
-            if (context.GetFeature<IHttpRequestFeature>() == null)
+            if (context.Features.Get<IHttpRequestFeature>() == null)
             {
                 throw new ArgumentException("Missing required feature: " + nameof(IHttpRequestFeature) + ".", nameof(context));
             }
-            if (context.GetFeature<IHttpResponseFeature>() == null)
+            if (context.Features.Get<IHttpResponseFeature>() == null)
             {
                 throw new ArgumentException("Missing required feature: " + nameof(IHttpResponseFeature) + ".", nameof(context));
             }
@@ -55,12 +56,13 @@ namespace Microsoft.AspNet.Owin
                 { OwinConstants.RequestPath, new FeatureMap<IHttpRequestFeature>(feature => feature.Path, () => string.Empty, (feature, value) => feature.Path = Convert.ToString(value)) },
                 { OwinConstants.RequestQueryString, new FeatureMap<IHttpRequestFeature>(feature => Utilities.RemoveQuestionMark(feature.QueryString), () => string.Empty,
                     (feature, value) => feature.QueryString = Utilities.AddQuestionMark(Convert.ToString(value))) },
-                { OwinConstants.RequestHeaders, new FeatureMap<IHttpRequestFeature>(feature => feature.Headers, (feature, value) => feature.Headers = (IDictionary<string, string[]>)value) },
+                { OwinConstants.RequestHeaders, new FeatureMap<IHttpRequestFeature>(feature => Utilities.MakeDictionaryStringArray(feature.Headers), (feature, value) => feature.Headers = Utilities.MakeDictionaryStringValues((IDictionary<string, string[]>)value)) },
                 { OwinConstants.RequestBody, new FeatureMap<IHttpRequestFeature>(feature => feature.Body, () => Stream.Null, (feature, value) => feature.Body = (Stream)value) },
+                { OwinConstants.RequestUser, new FeatureMap<IHttpAuthenticationFeature>(feature => feature.User, () => null, (feature, value) => feature.User = (ClaimsPrincipal)value) },
 
                 { OwinConstants.ResponseStatusCode, new FeatureMap<IHttpResponseFeature>(feature => feature.StatusCode, () => 200, (feature, value) => feature.StatusCode = Convert.ToInt32(value)) },
                 { OwinConstants.ResponseReasonPhrase, new FeatureMap<IHttpResponseFeature>(feature => feature.ReasonPhrase, (feature, value) => feature.ReasonPhrase = Convert.ToString(value)) },
-                { OwinConstants.ResponseHeaders, new FeatureMap<IHttpResponseFeature>(feature => feature.Headers, (feature, value) => feature.Headers = (IDictionary<string, string[]>)value) },
+                { OwinConstants.ResponseHeaders, new FeatureMap<IHttpResponseFeature>(feature => Utilities.MakeDictionaryStringArray(feature.Headers), (feature, value) => feature.Headers = Utilities.MakeDictionaryStringValues((IDictionary<string, string[]>)value)) },
                 { OwinConstants.ResponseBody, new FeatureMap<IHttpResponseFeature>(feature => feature.Body, () => Stream.Null, (feature, value) => feature.Body = (Stream)value) },
                 { OwinConstants.CommonKeys.OnSendingHeaders, new FeatureMap<IHttpResponseFeature>(
                     feature => new Action<Action<object>, object>((cb, state) => {
@@ -98,7 +100,7 @@ namespace Microsoft.AspNet.Owin
             };
 
             // owin.CallCancelled is required but the feature may not be present.
-            if (context.GetFeature<IHttpRequestLifetimeFeature>() != null)
+            if (context.Features.Get<IHttpRequestLifetimeFeature>() != null)
             {
                 _entries[OwinConstants.CallCancelled] = new FeatureMap<IHttpRequestLifetimeFeature>(feature => feature.RequestAborted);
             }
@@ -332,7 +334,7 @@ namespace Microsoft.AspNet.Owin
 
             internal bool TryGet(HttpContext context, out object value)
             {
-                object featureInstance = context.GetFeature(FeatureInterface);
+                object featureInstance = context.Features[FeatureInterface];
                 if (featureInstance == null)
                 {
                     value = null;
@@ -348,7 +350,7 @@ namespace Microsoft.AspNet.Owin
 
             internal void Set(HttpContext context, object value)
             {
-                var feature = context.GetFeature(FeatureInterface);
+                var feature = context.Features[FeatureInterface];
                 if (feature == null)
                 {
                     if (FeatureFactory == null)
@@ -358,7 +360,7 @@ namespace Microsoft.AspNet.Owin
                     else
                     {
                         feature = FeatureFactory();
-                        context.SetFeature(FeatureInterface, feature);
+                        context.Features[FeatureInterface] = feature;
                     }
                 }
                 Setter(feature, value);
