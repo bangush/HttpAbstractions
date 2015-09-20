@@ -5,6 +5,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Microsoft.AspNet.Http.Internal;
+using Microsoft.AspNet.WebUtilities;
 using Microsoft.Framework.Internal;
 using Microsoft.Framework.Primitives;
 using Microsoft.Net.Http.Headers;
@@ -17,14 +18,9 @@ namespace Microsoft.AspNet.Http.Features.Internal
         private readonly FeatureReference<IHttpRequestFeature> _request = FeatureReference<IHttpRequestFeature>.Default;
 
         private StringValues _original;
-        private IReadableStringCollection _parsedValues;
+        private IDictionary<string, StringValues> _parsedValues;
 
         public RequestCookiesFeature([NotNull] IDictionary<string, StringValues> cookies)
-            : this(new ReadableStringCollection(cookies))
-        {
-        }
-
-        public RequestCookiesFeature([NotNull] IReadableStringCollection cookies)
         {
             _parsedValues = cookies;
         }
@@ -34,13 +30,17 @@ namespace Microsoft.AspNet.Http.Features.Internal
             _features = features;
         }
 
-        public IReadableStringCollection Cookies
+        public IDictionary<string, StringValues> Cookies
         {
             get
             {
                 if (_features == null)
                 {
-                    return _parsedValues ?? ReadableStringCollection.Empty;
+                    if (_parsedValues == null)
+                    {
+                        _parsedValues = new LowAllocationDictionary<StringValues>();
+                    }
+                    return _parsedValues;
                 }
 
                 var headers = _request.Fetch(_features).Headers;

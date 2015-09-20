@@ -2,7 +2,9 @@
 // Licensed under the Apache License, Version 2.0. See License.txt in the project root for license information.
 
 using System.IO;
+using System.Collections.Generic;
 using Microsoft.AspNet.Http.Internal;
+using Microsoft.Framework.Primitives;
 
 namespace Microsoft.AspNet.Http.Features.Internal
 {
@@ -31,7 +33,7 @@ namespace Microsoft.AspNet.Http.Features.Internal
             set { Headers["Content-Type"] = value; }
         }
 
-        public IHeaderDictionary Headers { get; set; }
+        public IDictionary<string, StringValues> Headers { get; set; }
 
         public long Length
         {

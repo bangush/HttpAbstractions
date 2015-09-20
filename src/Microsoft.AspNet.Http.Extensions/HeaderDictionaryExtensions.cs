@@ -1,6 +1,7 @@
 ﻿// Copyright (c) .NET Foundation. All rights reserved.
 // Licensed under the Apache License, Version 2.0. See License.txt in the project root for license information.
 
+using System.Collections.Generic;
 using Microsoft.AspNet.Http.Internal;
 using Microsoft.Framework.Primitives;
 
@@ -13,7 +14,7 @@ namespace Microsoft.AspNet.Http
         /// </summary>
         /// <param name="key">The header name.</param>
         /// <param name="value">The header value.</param>
-        public static void Append(this IHeaderDictionary headers, string key, StringValues value)
+        public static void Append(this IDictionary<string, StringValues> headers, string key, StringValues value)
         {
             ParsingHelpers.AppendHeaderUnmodified(headers, key, value);
         }
@@ -23,7 +24,7 @@ namespace Microsoft.AspNet.Http
         /// </summary>
         /// <param name="key">The header name.</param>
         /// <param name="values">The header values.</param>
-        public static void AppendCommaSeparatedValues(this IHeaderDictionary headers, string key, params string[] values)
+        public static void AppendCommaSeparatedValues(this IDictionary<string, StringValues> headers, string key, params string[] values)
         {
             ParsingHelpers.AppendHeaderJoined(headers, key, values);
         }
@@ -34,7 +35,7 @@ namespace Microsoft.AspNet.Http
         /// </summary>
         /// <param name="key">The header name.</param>
         /// <returns>the associated values from the collection separated into individual values, or StringValues.Empty if the key is not present.</returns>
-        public static string[] GetCommaSeparatedValues(this IHeaderDictionary headers, string key)
+        public static string[] GetCommaSeparatedValues(this IDictionary<string, StringValues> headers, string key)
         {
             return ParsingHelpers.GetHeaderSplit(headers, key);
         }
@@ -44,7 +45,7 @@ namespace Microsoft.AspNet.Http
         /// </summary>
         /// <param name="key">The header name.</param>
         /// <param name="values">The header values.</param>
-        public static void SetCommaSeparatedValues(this IHeaderDictionary headers, string key, params string[] values)
+        public static void SetCommaSeparatedValues(this IDictionary<string, StringValues> headers, string key, params string[] values)
         {
             ParsingHelpers.SetHeaderJoined(headers, key, values);
         }

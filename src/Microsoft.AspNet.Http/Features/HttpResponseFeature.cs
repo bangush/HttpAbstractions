@@ -6,23 +6,50 @@ using System.Collections.Generic;
 using System.IO;
 using System.Threading.Tasks;
 using Microsoft.Framework.Primitives;
+using Microsoft.AspNet.Http.Internal;
 
 namespace Microsoft.AspNet.Http.Features.Internal
 {
     public class HttpResponseFeature : IHttpResponseFeature
     {
+        IDictionary<string, StringValues> _headers;
         public HttpResponseFeature()
         {
             StatusCode = 200;
-            Headers = new Dictionary<string, StringValues>(StringComparer.OrdinalIgnoreCase);
             Body = Stream.Null;
         }
 
         public int StatusCode { get; set; }
 
+        public virtual long? ContentLength
+        {
+            get
+            {
+                return ParsingHelpers.GetContentLength(Headers);
+            }
+            set
+            {
+                ParsingHelpers.SetContentLength(Headers, value);
+            }
+        }
+
         public string ReasonPhrase { get; set; }
 
-        public IDictionary<string, StringValues> Headers { get; set; }
+        public IDictionary<string, StringValues> Headers
+        {
+            get
+            {
+                if (_headers == null)
+                {
+                    _headers = new Dictionary<string, StringValues>(StringComparer.OrdinalIgnoreCase);
+                }
+                return _headers;
+            }
+            set
+            {
+                _headers = value;
+            }
+        }
 
         public Stream Body { get; set; }
 

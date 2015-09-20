@@ -6,17 +6,18 @@ using System.Collections.Generic;
 using System.Linq;
 using Microsoft.Framework.Internal;
 using Microsoft.Net.Http.Headers;
+using Microsoft.Framework.Primitives;
 
 namespace Microsoft.AspNet.Http.Headers
 {
     public class RequestHeaders
     {
-        public RequestHeaders([NotNull] IHeaderDictionary headers)
+        public RequestHeaders([NotNull] IDictionary<string, StringValues> headers)
         {
             Headers = headers;
         }
 
-        public IHeaderDictionary Headers { get; private set; }
+        public IDictionary<string, StringValues> Headers { get; private set; }
 
         public IList<MediaTypeHeaderValue> Accept
         {

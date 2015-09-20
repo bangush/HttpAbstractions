@@ -58,16 +58,6 @@ namespace Microsoft.AspNet.Http.Features.Internal
 
         public IFormCollection ReadForm()
         {
-            if (Form != null)
-            {
-                return Form;
-            }
-
-            if (!HasFormContentType)
-            {
-                throw new InvalidOperationException("Incorrect Content-Type: " + _request.ContentType);
-            }
-
             // TODO: How do we prevent thread exhaustion?
             return ReadFormAsync(CancellationToken.None).GetAwaiter().GetResult();
         }
@@ -89,7 +79,7 @@ namespace Microsoft.AspNet.Http.Features.Internal
             _request.EnableRewind();
 
             IDictionary<string, StringValues> formFields = null;
-            var files = new FormFileCollection();
+            FormFileCollection files = null;
 
             // Some of these code paths use StreamReader which does not support cancellation tokens.
             using (cancellationToken.Register(_request.HttpContext.Abort))
@@ -110,7 +100,7 @@ namespace Microsoft.AspNet.Http.Features.Internal
                     var section = await multipartReader.ReadNextSectionAsync(cancellationToken);
                     while (section != null)
                     {
-                        var headers = new HeaderDictionary(section.Headers);
+                        var headers = section.Headers;
                         ContentDispositionHeaderValue contentDisposition;
                         ContentDispositionHeaderValue.TryParse(headers[HeaderNames.ContentDisposition], out contentDisposition);
                         if (HasFileContentDisposition(contentDisposition))
@@ -122,6 +112,10 @@ namespace Microsoft.AspNet.Http.Features.Internal
                             {
                                 Headers = headers,
                             };
+                            if (files == null)
+                            {
+                                files = new FormFileCollection();
+                            }
                             files.Add(file);
                         }
                         else if (HasFormDataContentDisposition(contentDisposition))
@@ -148,7 +142,10 @@ namespace Microsoft.AspNet.Http.Features.Internal
                         section = await multipartReader.ReadNextSectionAsync(cancellationToken);
                     }
 
-                    formFields = formAccumulator.GetResults();
+                    if (formAccumulator.HasValues)
+                    {
+                        formFields = formAccumulator.GetResults();
+                    }
                 }
             }
 

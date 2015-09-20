@@ -150,10 +150,10 @@ namespace Microsoft.AspNet.Http.Internal
             Assert.Equal("value0", query1["name0"]);
             Assert.Equal("value1", query1["name1"]);
 
-            var query2 = new ReadableStringCollection(new Dictionary<string, StringValues>()
+            var query2 = new Dictionary<string, StringValues>()
             {
                 { "name2", "value2" }
-            });
+            };
 
             request.Query = query2;
             Assert.Same(query2, request.Query);
@@ -177,10 +177,10 @@ namespace Microsoft.AspNet.Http.Internal
             Assert.Equal("value0", cookies1["name0"]);
             Assert.Equal("value1", cookies1["name1"]);
 
-            var cookies2 = new ReadableStringCollection(new Dictionary<string, StringValues>()
+            var cookies2 = new Dictionary<string, StringValues>()
             {
                 { "name2", "value2" }
-            });
+            };
             request.Cookies = cookies2;
             Assert.Same(cookies2, request.Cookies);
             Assert.Equal("value2", request.Cookies["name2"]);

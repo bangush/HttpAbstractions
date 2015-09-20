@@ -7,17 +7,16 @@ using Microsoft.Framework.Primitives;
 
 namespace Microsoft.AspNet.WebUtilities
 {
-    public class KeyValueAccumulator
+    public struct KeyValueAccumulator
     {
         private Dictionary<string, List<string>> _accumulator;
 
-        public KeyValueAccumulator()
-        {
-            _accumulator = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
-        }
-
         public void Append(string key, string value)
         {
+            if (_accumulator == null)
+            {
+                _accumulator = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
+            }
             List<string> values;
             if (_accumulator.TryGetValue(key, out values))
             {
@@ -29,9 +28,17 @@ namespace Microsoft.AspNet.WebUtilities
             }
         }
 
+        public bool HasValues => _accumulator != null;
+
         public IDictionary<string, StringValues> GetResults()
         {
-            var results = new Dictionary<string, StringValues>(StringComparer.OrdinalIgnoreCase);
+            if (_accumulator == null)
+            {
+                return new LowAllocationDictionary<StringValues>();
+            }
+
+            var results = new LowAllocationDictionary<StringValues>(_accumulator.Count);
+
             foreach (var kv in _accumulator)
             {
                 results.Add(kv.Key, kv.Value.ToArray());

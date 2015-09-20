@@ -554,12 +554,14 @@ namespace Microsoft.AspNet.Http.Internal
             return value;
         }
 
-        public static long? GetContentLength([NotNull] IHeaderDictionary headers)
+        public static long? GetContentLength([NotNull] IDictionary<string, StringValues> headers)
         {
             const NumberStyles styles = NumberStyles.AllowLeadingWhite | NumberStyles.AllowTrailingWhite;
             long value;
-            var rawValue = headers[HeaderNames.ContentLength];
-            if (rawValue.Count == 1 &&
+
+            StringValues rawValue;
+            if (headers.TryGetValue(HeaderNames.ContentLength, out rawValue) &&
+                rawValue.Count == 1 &&
                 !string.IsNullOrWhiteSpace(rawValue[0]) &&
                 long.TryParse(rawValue[0], styles, CultureInfo.InvariantCulture, out value))
             {
@@ -569,7 +571,7 @@ namespace Microsoft.AspNet.Http.Internal
             return null;
         }
 
-        public static void SetContentLength([NotNull] IHeaderDictionary headers, long? value)
+        public static void SetContentLength([NotNull] IDictionary<string, StringValues> headers, long? value)
         {
             if (value.HasValue)
             {

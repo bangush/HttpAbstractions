@@ -2,10 +2,12 @@
 // Licensed under the Apache License, Version 2.0. See License.txt in the project root for license information.
 
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Threading.Tasks;
 using Microsoft.AspNet.Http.Features;
 using Microsoft.AspNet.Http.Features.Internal;
+using Microsoft.Framework.Primitives;
 using Microsoft.Net.Http.Headers;
 
 namespace Microsoft.AspNet.Http.Internal
@@ -41,9 +43,9 @@ namespace Microsoft.AspNet.Http.Internal
             set { HttpResponseFeature.StatusCode = value; }
         }
 
-        public override IHeaderDictionary Headers
+        public override IDictionary<string, StringValues> Headers
         {
-            get { return new HeaderDictionary(HttpResponseFeature.Headers); }
+            get { return HttpResponseFeature.Headers; }
         }
 
         public override Stream Body
@@ -54,21 +56,20 @@ namespace Microsoft.AspNet.Http.Internal
 
         public override long? ContentLength
         {
-            get
-            {
-                return ParsingHelpers.GetContentLength(Headers);
-            }
-            set
-            {
-                ParsingHelpers.SetContentLength(Headers, value);
-            }
+            get { return HttpResponseFeature.ContentLength; }
+            set { HttpResponseFeature.ContentLength = value; }
         }
 
         public override string ContentType
         {
             get
             {
-                return Headers[HeaderNames.ContentType];
+                StringValues value;
+                if (Headers.TryGetValue(HeaderNames.ContentType, out value))
+                {
+                    return value;
+                }
+                return null;
             }
             set
             {

@@ -2,9 +2,11 @@
 // Licensed under the Apache License, Version 2.0. See License.txt in the project root for license information.
 
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Threading.Tasks;
 using Microsoft.Framework.Internal;
+using Microsoft.Framework.Primitives;
 
 namespace Microsoft.AspNet.Http
 {
@@ -21,7 +23,7 @@ namespace Microsoft.AspNet.Http
 
         public abstract int StatusCode { get; set; }
 
-        public abstract IHeaderDictionary Headers { get; }
+        public abstract IDictionary<string, StringValues> Headers { get; }
 
         public abstract Stream Body { get; set; }
 

@@ -2,12 +2,14 @@
 // Licensed under the Apache License, Version 2.0. See License.txt in the project root for license information.
 
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.AspNet.Http.Features;
 using Microsoft.AspNet.Http.Features.Internal;
 using Microsoft.Net.Http.Headers;
+using Microsoft.Framework.Primitives;
 
 namespace Microsoft.AspNet.Http.Internal
 {
@@ -109,7 +111,7 @@ namespace Microsoft.AspNet.Http.Internal
             set { Headers["Host"] = value.ToUriComponent(); }
         }
 
-        public override IReadableStringCollection Query
+        public override IDictionary<string, StringValues> Query
         {
             get { return QueryFeature.Query; }
             set { QueryFeature.Query = value; }
@@ -121,12 +123,12 @@ namespace Microsoft.AspNet.Http.Internal
             set { HttpRequestFeature.Protocol = value; }
         }
 
-        public override IHeaderDictionary Headers
+        public override IDictionary<string, StringValues> Headers
         {
-            get { return new HeaderDictionary(HttpRequestFeature.Headers); }
+            get { return HttpRequestFeature.Headers; }
         }
 
-        public override IReadableStringCollection Cookies
+        public override IDictionary<string, StringValues> Cookies
         {
             get { return RequestCookiesFeature.Cookies; }
             set { RequestCookiesFeature.Cookies = value; }
@@ -134,7 +136,15 @@ namespace Microsoft.AspNet.Http.Internal
 
         public override string ContentType
         {
-            get { return Headers[HeaderNames.ContentType]; }
+            get
+            {
+                StringValues value;
+                if (Headers.TryGetValue(HeaderNames.ContentType, out value))
+                {
+                    return value;
+                }
+                return null;
+            }
             set { Headers[HeaderNames.ContentType] = value; }
         }
 

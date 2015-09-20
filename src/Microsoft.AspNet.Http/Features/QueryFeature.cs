@@ -12,18 +12,14 @@ namespace Microsoft.AspNet.Http.Features.Internal
 {
     public class QueryFeature : IQueryFeature
     {
+
         private readonly IFeatureCollection _features;
         private FeatureReference<IHttpRequestFeature> _request = FeatureReference<IHttpRequestFeature>.Default;
 
         private string _original;
-        private IReadableStringCollection _parsedValues;
+        private IDictionary<string, StringValues> _parsedValues;
 
         public QueryFeature([NotNull] IDictionary<string, StringValues> query)
-            : this(new ReadableStringCollection(query))
-        {
-        }
-
-        public QueryFeature([NotNull] IReadableStringCollection query)
         {
             _parsedValues = query;
         }
@@ -33,20 +29,24 @@ namespace Microsoft.AspNet.Http.Features.Internal
             _features = features;
         }
 
-        public IReadableStringCollection Query
+        public IDictionary<string, StringValues> Query
         {
             get
             {
                 if (_features == null)
                 {
-                    return _parsedValues ?? ReadableStringCollection.Empty;
+                    if (_parsedValues == null)
+                    {
+                        _parsedValues = new LowAllocationDictionary<StringValues>();
+                    }
+                    return _parsedValues;
                 }
 
                 var current = _request.Fetch(_features).QueryString;
                 if (_parsedValues == null || !string.Equals(_original, current, StringComparison.Ordinal))
                 {
                     _original = current;
-                    _parsedValues = new ReadableStringCollection(QueryHelpers.ParseQuery(current));
+                    _parsedValues = QueryHelpers.ParseQuery(current);
                 }
                 return _parsedValues;
             }

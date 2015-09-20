@@ -1,9 +1,11 @@
 // Copyright (c) .NET Foundation. All rights reserved.
 // Licensed under the Apache License, Version 2.0. See License.txt in the project root for license information.
 
+using System.Collections.Generic;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Framework.Primitives;
 
 namespace Microsoft.AspNet.Http
 {
@@ -57,7 +59,7 @@ namespace Microsoft.AspNet.Http
         /// Gets the query value collection parsed from owin.RequestQueryString.
         /// </summary>
         /// <returns>The query value collection parsed from owin.RequestQueryString.</returns>
-        public abstract IReadableStringCollection Query { get; set; }
+        public abstract IDictionary<string, StringValues> Query { get; set; }
 
         /// <summary>
         /// Gets or set the owin.RequestProtocol.
@@ -69,13 +71,13 @@ namespace Microsoft.AspNet.Http
         /// Gets the request headers.
         /// </summary>
         /// <returns>The request headers.</returns>
-        public abstract IHeaderDictionary Headers { get; }
+        public abstract IDictionary<string, StringValues> Headers { get; }
 
         /// <summary>
         /// Gets the collection of Cookies for this request.
         /// </summary>
         /// <returns>The collection of Cookies for this request.</returns>
-        public abstract IReadableStringCollection Cookies { get; set; }
+        public abstract IDictionary<string, StringValues> Cookies { get; set; }
 
         /// <summary>
         /// Gets or sets the Content-Length header

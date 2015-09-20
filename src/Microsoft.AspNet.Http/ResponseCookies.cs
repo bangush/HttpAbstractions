@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See License.txt in the project root for license information.
 
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using Microsoft.Framework.Internal;
 using Microsoft.Framework.Primitives;
@@ -19,12 +20,12 @@ namespace Microsoft.AspNet.Http.Internal
         /// Create a new wrapper
         /// </summary>
         /// <param name="headers"></param>
-        public ResponseCookies([NotNull] IHeaderDictionary headers)
+        public ResponseCookies([NotNull] IDictionary<string, StringValues> headers)
         {
             Headers = headers;
         }
 
-        private IHeaderDictionary Headers { get; set; }
+        private IDictionary<string, StringValues> Headers { get; set; }
 
         /// <summary>
         /// Add a new cookie and value

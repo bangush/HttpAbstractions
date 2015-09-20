@@ -2,65 +2,15 @@
 // Licensed under the Apache License, Version 2.0. See License.txt in the project root for license information.
 
 using System;
-using System.Collections;
 using System.Collections.Generic;
+using Microsoft.AspNet.WebUtilities;
 using Microsoft.Framework.Primitives;
 using Microsoft.Net.Http.Headers;
 
 namespace Microsoft.AspNet.Http.Internal
 {
-    public class RequestCookiesCollection : IReadableStringCollection
+    public class RequestCookiesCollection : LowAllocationDictionary<string>, IDictionary<string, StringValues>
     {
-        private readonly IDictionary<string, string> _dictionary;
-
-        public RequestCookiesCollection()
-        {
-            _dictionary = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        }
-
-        public StringValues this[string key]
-        {
-            get { return Get(key); }
-        }
-
-        /// <summary>
-        /// Gets the number of elements contained in the collection.
-        /// </summary>
-        public int Count
-        {
-            get { return _dictionary.Count; }
-        }
-
-        /// <summary>
-        /// Gets a collection containing the keys.
-        /// </summary>
-        public ICollection<string> Keys
-        {
-            get { return _dictionary.Keys; }
-        }
-
-        /// <summary>
-        /// Determines whether the collection contains an element with the specified key.
-        /// </summary>
-        /// <param name="key"></param>
-        /// <returns></returns>
-        public bool ContainsKey(string key)
-        {
-            return _dictionary.ContainsKey(key);
-        }
-
-        /// <summary>
-        /// Get the associated value from the collection.  Multiple values will be merged.
-        /// Returns null if the key is not present.
-        /// </summary>
-        /// <param name="key"></param>
-        /// <returns></returns>
-        public string Get(string key)
-        {
-            string value;
-            return _dictionary.TryGetValue(key, out value) ? value : null;
-        }
-
         /// <summary>
         /// Get the associated values from the collection in their original format.
         /// Returns null if the key is not present.
@@ -70,12 +20,12 @@ namespace Microsoft.AspNet.Http.Internal
         public IList<string> GetValues(string key)
         {
             string value;
-            return _dictionary.TryGetValue(key, out value) ? new[] { value } : null;
+            return TryGetValue(key, out value) ? new[] { value } : null;
         }
 
         public void Reparse(IList<string> values)
         {
-            _dictionary.Clear();
+            Clear();
 
             IList<CookieHeaderValue> cookies;
             if (CookieHeaderValue.TryParseList(values, out cookies))
@@ -84,22 +34,102 @@ namespace Microsoft.AspNet.Http.Internal
                 {
                     var name = Uri.UnescapeDataString(cookie.Name.Replace('+', ' '));
                     var value = Uri.UnescapeDataString(cookie.Value.Replace('+', ' '));
-                    _dictionary[name] = value;
+                    this[name] = value;
                 }
             }
         }
 
-        public IEnumerator<KeyValuePair<string, StringValues>> GetEnumerator()
+        StringValues IDictionary<string, StringValues>.this[string key]
         {
-            foreach (var pair in _dictionary)
+            get
             {
-                yield return new KeyValuePair<string, StringValues>(pair.Key, pair.Value);
+                string value;
+                if (TryGetValue(key, out value))
+                {
+                    return new StringValues(value);
+                }
+                return new StringValues();
+            }
+            set { this[key] = value; }
+        }
+
+        int ICollection<KeyValuePair<string, StringValues>>.Count => Count;
+
+        bool ICollection<KeyValuePair<string, StringValues>>.IsReadOnly => IsReadOnly;
+
+        ICollection<string> IDictionary<string, StringValues>.Keys => Keys;
+
+        ICollection<StringValues> IDictionary<string, StringValues>.Values => (ICollection<StringValues>)Values;
+
+        void ICollection<KeyValuePair<string, StringValues>>.Add(KeyValuePair<string, StringValues> item)
+        {
+            Add(item.Key, item.Value.ToString());
+        }
+
+        void IDictionary<string, StringValues>.Add(string key, StringValues value)
+        {
+            Add(key, value.ToString());
+        }
+
+        void ICollection<KeyValuePair<string, StringValues>>.Clear()
+        {
+            Clear();
+        }
+
+        bool ICollection<KeyValuePair<string, StringValues>>.Contains(KeyValuePair<string, StringValues> item)
+        {
+            return Contains(new KeyValuePair<string, string>(item.Key, item.Value.ToString()));
+        }
+
+        bool IDictionary<string, StringValues>.ContainsKey(string key) => ContainsKey(key);
+
+        void ICollection<KeyValuePair<string, StringValues>>.CopyTo(KeyValuePair<string, StringValues>[] array, int arrayIndex)
+        {
+
+            if (Store == null)
+            {
+                return;
+            }
+
+            foreach (var item in Store)
+            {
+                array[arrayIndex] = new KeyValuePair<string, StringValues>(item.Key, item.Value);
+                arrayIndex++;
             }
         }
 
-        IEnumerator IEnumerable.GetEnumerator()
+        IEnumerator<KeyValuePair<string, StringValues>> IEnumerable<KeyValuePair<string, StringValues>>.GetEnumerator()
         {
-            return GetEnumerator();
+            return ((IEnumerable<KeyValuePair<string, StringValues>>)Store).GetEnumerator();
+        }
+
+        bool ICollection<KeyValuePair<string, StringValues>>.Remove(KeyValuePair<string, StringValues> item)
+        {
+            if (Store == null)
+            {
+                return false;
+            }
+
+            string value;
+
+            if (Store.TryGetValue(item.Key, out value) && item.Value == value)
+            {
+                return Store.Remove(item.Key);
+            }
+            return false;
+        }
+
+        bool IDictionary<string, StringValues>.Remove(string key) => this.Remove(key);
+
+        bool IDictionary<string, StringValues>.TryGetValue(string key, out StringValues value)
+        {
+            string val;
+            if (!TryGetValue(key, out val))
+            {
+                return false;
+            }
+            value = val;
+            return true;
         }
     }
 }

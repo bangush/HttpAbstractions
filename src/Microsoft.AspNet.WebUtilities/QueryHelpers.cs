@@ -75,6 +75,10 @@ namespace Microsoft.AspNet.WebUtilities
         /// <returns>A collection of parsed keys and values.</returns>
         public static IDictionary<string, StringValues> ParseQuery(string queryString)
         {
+            if (string.IsNullOrEmpty(queryString) || queryString == "?")
+            {
+                return new LowAllocationDictionary<StringValues>();
+            }
             if (!string.IsNullOrEmpty(queryString) && queryString[0] == '?')
             {
                 queryString = queryString.Substring(1);

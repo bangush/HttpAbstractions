@@ -21,6 +21,7 @@ using Microsoft.Framework.Primitives;
 
 namespace Microsoft.AspNet.Owin
 {
+    using Net.Http.Headers;
     using SendFileFunc = Func<string, long, long?, CancellationToken, Task>;
 
     public class OwinFeatureCollection :
@@ -110,6 +111,12 @@ namespace Microsoft.AspNet.Owin
         {
             get { return Utilities.MakeDictionaryStringValues(Prop<IDictionary<string, string[]>>(OwinConstants.RequestHeaders)); }
             set { Prop(OwinConstants.RequestHeaders, Utilities.MakeDictionaryStringArray(value)); }
+        }
+
+        public long? ContentLength
+        {
+            get { return GetContentLength(((IHttpRequestFeature)this).Headers); }
+            set { SetContentLength(((IHttpRequestFeature)this).Headers, value); }
         }
 
         string IHttpRequestIdentifierFeature.TraceIdentifier
@@ -233,6 +240,34 @@ namespace Microsoft.AspNet.Owin
                     return true;
                 }
                 return false;
+            }
+        }
+
+        private static long? GetContentLength(IDictionary<string, StringValues> headers)
+        {
+            const NumberStyles styles = NumberStyles.AllowLeadingWhite | NumberStyles.AllowTrailingWhite;
+            long value;
+            StringValues rawValue;
+            if (headers.TryGetValue(HeaderNames.ContentLength, out rawValue) &&
+                rawValue.Count == 1 &&
+                !string.IsNullOrWhiteSpace(rawValue[0]) &&
+                long.TryParse(rawValue[0], styles, CultureInfo.InvariantCulture, out value))
+            {
+                return value;
+            }
+
+            return null;
+        }
+
+        private static void SetContentLength(IDictionary<string, StringValues> headers, long? value)
+        {
+            if (value.HasValue)
+            {
+                headers[HeaderNames.ContentLength] = value.Value.ToString(CultureInfo.InvariantCulture);
+            }
+            else
+            {
+                headers.Remove(HeaderNames.ContentLength);
             }
         }
 

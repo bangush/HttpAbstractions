@@ -23,7 +23,7 @@ namespace Microsoft.AspNet.Http.Features.Internal
                 if (_cookiesCollection == null)
                 {
                     var headers = _request.Fetch(_features).Headers;
-                    _cookiesCollection = new ResponseCookies(new HeaderDictionary(headers));
+                    _cookiesCollection = new ResponseCookies(headers);
                 }
 
                 return _cookiesCollection;

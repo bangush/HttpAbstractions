@@ -13,6 +13,7 @@ namespace Microsoft.AspNet.Http.Features
     {
         int StatusCode { get; set; }
         string ReasonPhrase { get; set; }
+        long? ContentLength { get; set; }
         IDictionary<string, StringValues> Headers { get; set; }
         Stream Body { get; set; }
         bool HasStarted { get; }
