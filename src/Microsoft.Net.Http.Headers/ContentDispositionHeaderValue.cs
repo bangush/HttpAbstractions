@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See License.txt in the project root for license information.
 
 using System;
+using System.Buffers;
 using System.Collections.Generic;
 using System.Diagnostics.Contracts;
 using System.Globalization;
@@ -578,12 +579,13 @@ namespace Microsoft.Net.Http.Headers
             }
 
             var decoded = new StringBuilder();
+            byte[] unescapedBytes = null;
             try
             {
                 var encoding = Encoding.GetEncoding(parts[0]);
 
                 var dataString = parts[2];
-                var unescapedBytes = new byte[dataString.Length];
+                unescapedBytes = ArrayPool<byte>.Shared.Rent(dataString.Length);
                 var unescapedBytesCount = 0;
                 for (var index = 0; index < dataString.Length; index++)
                 {
@@ -613,9 +615,17 @@ namespace Microsoft.Net.Http.Headers
             }
             catch (ArgumentException)
             {
+                if (unescapedBytes != null)
+                {
+                    ArrayPool<byte>.Shared.Return(unescapedBytes);
+                }
                 return false; // Unknown encoding or bad characters
             }
 
+            if (unescapedBytes != null)
+            {
+                ArrayPool<byte>.Shared.Return(unescapedBytes);
+            }
             output = decoded.ToString();
             return true;
         }
