@@ -19,23 +19,35 @@ namespace Microsoft.AspNetCore.WebUtilities
     {
         private readonly TextReader _reader;
         private readonly char[] _buffer;
+        private readonly ArrayPool<char> _charPool;
         private readonly StringBuilder _builder = new StringBuilder();
         private int _bufferOffset;
         private int _bufferCount;
         private bool _disposed;
 
         public FormReader(string data)
+            : this(data, ArrayPool<char>.Shared)
+        {
+        }
+
+        public FormReader(string data, ArrayPool<char> charPool)
         {
             if (data == null)
             {
                 throw new ArgumentNullException(nameof(data));
             }
 
-            _buffer = ArrayPool<char>.Shared.Rent(1024);
+            _buffer = charPool.Rent(1024);
+            _charPool = charPool;
             _reader = new StringReader(data);
         }
 
         public FormReader(Stream stream, Encoding encoding)
+            : this(stream, encoding, ArrayPool<char>.Shared)
+        {
+        }
+
+        public FormReader(Stream stream, Encoding encoding, ArrayPool<char> charPool)
         {
             if (stream == null)
             {
@@ -47,7 +59,8 @@ namespace Microsoft.AspNetCore.WebUtilities
                 throw new ArgumentNullException(nameof(encoding));
             }
 
-            _buffer = ArrayPool<char>.Shared.Rent(1024);
+            _buffer = charPool.Rent(1024);
+            _charPool = charPool;
             _reader = new StreamReader(stream, encoding, detectEncodingFromByteOrderMarks: true, bufferSize: 1024 * 2, leaveOpen: true);
         }
 
@@ -221,7 +234,7 @@ namespace Microsoft.AspNetCore.WebUtilities
             if (!_disposed)
             {
                 _disposed = true;
-                ArrayPool<char>.Shared.Return(_buffer);
+                _charPool.Return(_buffer);
             }
         }
     }

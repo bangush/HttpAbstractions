@@ -44,6 +44,11 @@ namespace Microsoft.AspNetCore.WebUtilities
         /// </remarks>
         public static byte[] Base64UrlDecode(string input, int offset, int count)
         {
+            return Base64UrlDecode(input, offset, count, ArrayPool<char>.Shared);
+        }
+
+        public static byte[] Base64UrlDecode(string input, int offset, int count, ArrayPool<char> charPool)
+        {
             if (input == null)
             {
                 throw new ArgumentNullException(nameof(input));
@@ -62,7 +67,7 @@ namespace Microsoft.AspNetCore.WebUtilities
             // First, we need to add the padding characters back.
             var numPaddingCharsToAdd = GetNumBase64PaddingCharsToAddForDecode(count);
             var length = checked(count + numPaddingCharsToAdd);
-            var completeBase64Array = ArrayPool<char>.Shared.Rent(length);
+            var completeBase64Array = charPool.Rent(length);
             Debug.Assert(completeBase64Array.Length % 4 == 0, "Invariant: Array length must be a multiple of 4.");
             input.CopyTo(offset, completeBase64Array, 0, count);
             for (var i = 1; i <= numPaddingCharsToAdd; i++)
@@ -87,7 +92,7 @@ namespace Microsoft.AspNetCore.WebUtilities
             // Finally, decode.
             // If the caller provided invalid base64 chars, they'll be caught here.
             var decoded = Convert.FromBase64CharArray(completeBase64Array, 0, length);
-            ArrayPool<char>.Shared.Return(completeBase64Array);
+            charPool.Return(completeBase64Array);
             return decoded;
         }
 
@@ -115,6 +120,11 @@ namespace Microsoft.AspNetCore.WebUtilities
         /// <returns>The base64url-encoded form of the input.</returns>
         public static string Base64UrlEncode(byte[] input, int offset, int count)
         {
+            return Base64UrlEncode(input, offset, count, ArrayPool<char>.Shared);
+        }
+
+        public static string Base64UrlEncode(byte[] input, int offset, int count, ArrayPool<char> charPool)
+        {
             if (input == null)
             {
                 throw new ArgumentNullException(nameof(input));
@@ -130,7 +140,7 @@ namespace Microsoft.AspNetCore.WebUtilities
 
             // We're going to use base64url encoding with no padding characters.
             // See RFC 4648, Sec. 5.
-            var buffer = ArrayPool<char>.Shared.Rent(GetNumBase64CharsRequiredForInput(count));
+            var buffer = charPool.Rent(GetNumBase64CharsRequiredForInput(count));
             int numBase64Chars = Convert.ToBase64CharArray(input, offset, count, buffer, 0);
 
             // Fix up '+' -> '-' and '/' -> '_'
@@ -149,7 +159,7 @@ namespace Microsoft.AspNetCore.WebUtilities
                 {
                     // We've reached a padding character: truncate the string from this point
                     var encodedPadded = new String(buffer, 0, i);
-                    ArrayPool<char>.Shared.Return(buffer);
+                    charPool.Return(buffer);
                     return encodedPadded;
                 }
             }
@@ -157,7 +167,7 @@ namespace Microsoft.AspNetCore.WebUtilities
             // If we got this far, the buffer didn't contain any padding chars, so turn
             // it directly into a string.
             var encoded = new String(buffer, 0, numBase64Chars);
-            ArrayPool<char>.Shared.Return(buffer);
+            charPool.Return(buffer);
             return encoded;
         }
 

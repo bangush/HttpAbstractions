@@ -17,11 +17,17 @@ namespace Microsoft.AspNetCore.WebUtilities
 
         private readonly Stream _inner;
         private readonly byte[] _buffer;
+        private readonly ArrayPool<byte> _bytePool;
         private int _bufferOffset = 0;
         private int _bufferCount = 0;
         private bool _disposed;
 
         public BufferedReadStream(Stream inner, int bufferSize)
+            : this(inner, bufferSize, ArrayPool<byte>.Shared)
+        {
+        }
+
+        public BufferedReadStream(Stream inner, int bufferSize, ArrayPool<byte> bytePool)
         {
             if (inner == null)
             {
@@ -29,7 +35,8 @@ namespace Microsoft.AspNetCore.WebUtilities
             }
 
             _inner = inner;
-            _buffer = ArrayPool<byte>.Shared.Rent(bufferSize);
+            _bytePool = bytePool;
+            _buffer = bytePool.Rent(bufferSize);
         }
 
         public ArraySegment<byte> BufferedData
@@ -132,7 +139,7 @@ namespace Microsoft.AspNetCore.WebUtilities
             if (!_disposed)
             {
                 _disposed = true;
-                ArrayPool<byte>.Shared.Return(_buffer);
+                _bytePool.Return(_buffer);
 
                 if (disposing)
                 {

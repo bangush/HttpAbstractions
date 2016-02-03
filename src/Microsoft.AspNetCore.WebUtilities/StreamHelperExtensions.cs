@@ -10,10 +10,14 @@ namespace Microsoft.AspNetCore.WebUtilities
 {
     public static class StreamHelperExtensions
     {
-        public static async Task DrainAsync(this Stream stream, CancellationToken cancellationToken)
+        public static Task DrainAsync(this Stream stream, CancellationToken cancellationToken)
+        {
+            return stream.DrainAsync(cancellationToken, ArrayPool<byte>.Shared);
+        }
+        public static async Task DrainAsync(this Stream stream, CancellationToken cancellationToken, ArrayPool<byte> bytePool)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var buffer = ArrayPool<byte>.Shared.Rent(1024);
+            var buffer = bytePool.Rent(1024);
             try
             {
                 while (await stream.ReadAsync(buffer, 0, buffer.Length, cancellationToken) > 0)
@@ -24,7 +28,7 @@ namespace Microsoft.AspNetCore.WebUtilities
             }
             finally
             {
-                ArrayPool<byte>.Shared.Return(buffer);
+                bytePool.Return(buffer);
             }
         }
     }
