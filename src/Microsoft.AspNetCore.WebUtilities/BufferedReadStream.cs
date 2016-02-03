@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See License.txt in the project root for license information.
 
 using System;
+using System.Buffers;
 using System.IO;
 using System.Text;
 using System.Threading;
@@ -28,7 +29,7 @@ namespace Microsoft.AspNetCore.WebUtilities
             }
 
             _inner = inner;
-            _buffer = new byte[bufferSize];
+            _buffer = ArrayPool<byte>.Shared.Rent(bufferSize);
         }
 
         public ArraySegment<byte> BufferedData
@@ -128,10 +129,15 @@ namespace Microsoft.AspNetCore.WebUtilities
 
         protected override void Dispose(bool disposing)
         {
-            _disposed = true;
-            if (disposing)
+            if (!_disposed)
             {
-                _inner.Dispose();
+                _disposed = true;
+                ArrayPool<byte>.Shared.Return(_buffer);
+
+                if (disposing)
+                {
+                    _inner.Dispose();
+                }
             }
         }
 
