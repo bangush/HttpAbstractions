@@ -12,14 +12,20 @@ namespace Microsoft.AspNetCore.WebUtilities
     {
         public static async Task DrainAsync(this Stream stream, CancellationToken cancellationToken)
         {
-            var buffer = ArrayPool<byte>.Shared.Rent(1024);
             cancellationToken.ThrowIfCancellationRequested();
-            while (await stream.ReadAsync(buffer, 0, buffer.Length, cancellationToken) > 0)
+            var buffer = ArrayPool<byte>.Shared.Rent(1024);
+            try
             {
-                // Not all streams support cancellation directly.
-                cancellationToken.ThrowIfCancellationRequested();
+                while (await stream.ReadAsync(buffer, 0, buffer.Length, cancellationToken) > 0)
+                {
+                    // Not all streams support cancellation directly.
+                    cancellationToken.ThrowIfCancellationRequested();
+                }
             }
-            ArrayPool<byte>.Shared.Return(buffer);
+            finally
+            {
+                ArrayPool<byte>.Shared.Return(buffer);
+            }
         }
     }
 }
