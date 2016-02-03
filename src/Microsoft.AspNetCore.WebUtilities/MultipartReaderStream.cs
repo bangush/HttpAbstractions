@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See License.txt in the project root for license information.
 
 using System;
+using System.Buffers;
 using System.Diagnostics;
 using System.IO;
 using System.Text;
@@ -227,17 +228,17 @@ namespace Microsoft.AspNetCore.WebUtilities
                 // "The boundary may be followed by zero or more characters of
                 // linear whitespace. It is then terminated by either another CRLF"
                 // or -- for the final boundary.
-                byte[] boundary = new byte[_boundaryBytes.Length];
-                read = _innerStream.Read(boundary, 0, boundary.Length);
-                Debug.Assert(read == boundary.Length); // It should have all been buffered
+                var boundary = ArrayPool<byte>.Shared.Rent(_boundaryBytes.Length);
+                read = _innerStream.Read(boundary, 0, _boundaryBytes.Length);
+                Debug.Assert(read == _boundaryBytes.Length); // It should have all been buffered
                 var remainder = _innerStream.ReadLine(lengthLimit: 100); // Whitespace may exceed the buffer.
                 remainder = remainder.Trim();
                 if (string.Equals("--", remainder, StringComparison.Ordinal))
                 {
                     FinalBoundaryFound = true;
                 }
+                ArrayPool<byte>.Shared.Return(boundary);
                 Debug.Assert(FinalBoundaryFound || string.Equals(string.Empty, remainder, StringComparison.Ordinal), "Un-expected data found on the boundary line: " + remainder);
-
                 _finished = true;
                 return 0;
             }
@@ -279,15 +280,16 @@ namespace Microsoft.AspNetCore.WebUtilities
                 // "The boundary may be followed by zero or more characters of
                 // linear whitespace. It is then terminated by either another CRLF"
                 // or -- for the final boundary.
-                byte[] boundary = new byte[_boundaryBytes.Length];
-                read = _innerStream.Read(boundary, 0, boundary.Length);
-                Debug.Assert(read == boundary.Length); // It should have all been buffered
+                var boundary = ArrayPool<byte>.Shared.Rent(_boundaryBytes.Length);
+                read = _innerStream.Read(boundary, 0, _boundaryBytes.Length);
+                Debug.Assert(read == _boundaryBytes.Length); // It should have all been buffered
                 var remainder = await _innerStream.ReadLineAsync(lengthLimit: 100, cancellationToken: cancellationToken); // Whitespace may exceed the buffer.
                 remainder = remainder.Trim();
                 if (string.Equals("--", remainder, StringComparison.Ordinal))
                 {
                     FinalBoundaryFound = true;
                 }
+                ArrayPool<byte>.Shared.Return(boundary);
                 Debug.Assert(FinalBoundaryFound || string.Equals(string.Empty, remainder, StringComparison.Ordinal), "Un-expected data found on the boundary line: " + remainder);
 
                 _finished = true;
