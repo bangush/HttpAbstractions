@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See License.txt in the project root for license information.
 
 using System;
+using System.Buffers;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
@@ -126,11 +127,18 @@ namespace Microsoft.AspNetCore.Owin
                 await CloseOutputAsync(closeStatus, statusDescription, cancellationToken);
             }
 
-            byte[] buffer = new byte[1024];
-            while (State == WebSocketState.CloseSent)
+            var buffer = ArrayPool<byte>.Shared.Rent(1024);
+            try
             {
-                // Drain until close received
-                await ReceiveAsync(new ArraySegment<byte>(buffer), cancellationToken);
+                while (State == WebSocketState.CloseSent)
+                {
+                    // Drain until close received
+                    await ReceiveAsync(new ArraySegment<byte>(buffer), cancellationToken);
+                }
+            }
+            finally
+            {
+                ArrayPool<byte>.Shared.Return(buffer);
             }
         }
 
