@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See License.txt in the project root for license information.
 
 using System;
+using System.Buffers;
 using System.Diagnostics;
 
 namespace Microsoft.AspNetCore.WebUtilities
@@ -59,17 +60,18 @@ namespace Microsoft.AspNetCore.WebUtilities
             // Assumption: input is base64url encoded without padding and contains no whitespace.
 
             // First, we need to add the padding characters back.
-            int numPaddingCharsToAdd = GetNumBase64PaddingCharsToAddForDecode(count);
-            char[] completeBase64Array = new char[checked(count + numPaddingCharsToAdd)];
+            var numPaddingCharsToAdd = GetNumBase64PaddingCharsToAddForDecode(count);
+            var length = checked(count + numPaddingCharsToAdd);
+            var completeBase64Array = ArrayPool<char>.Shared.Rent(length);
             Debug.Assert(completeBase64Array.Length % 4 == 0, "Invariant: Array length must be a multiple of 4.");
             input.CopyTo(offset, completeBase64Array, 0, count);
-            for (int i = 1; i <= numPaddingCharsToAdd; i++)
+            for (var i = 1; i <= numPaddingCharsToAdd; i++)
             {
-                completeBase64Array[completeBase64Array.Length - i] = '=';
+                completeBase64Array[length - i] = '=';
             }
 
             // Next, fix up '-' -> '+' and '_' -> '/'
-            for (int i = 0; i < completeBase64Array.Length; i++)
+            for (int i = 0; i < length; i++)
             {
                 char c = completeBase64Array[i];
                 if (c == '-')
@@ -84,7 +86,9 @@ namespace Microsoft.AspNetCore.WebUtilities
 
             // Finally, decode.
             // If the caller provided invalid base64 chars, they'll be caught here.
-            return Convert.FromBase64CharArray(completeBase64Array, 0, completeBase64Array.Length);
+            var decoded = Convert.FromBase64CharArray(completeBase64Array, 0, length);
+            ArrayPool<char>.Shared.Return(completeBase64Array);
+            return decoded;
         }
 
         /// <summary>
@@ -126,7 +130,7 @@ namespace Microsoft.AspNetCore.WebUtilities
 
             // We're going to use base64url encoding with no padding characters.
             // See RFC 4648, Sec. 5.
-            char[] buffer = new char[GetNumBase64CharsRequiredForInput(count)];
+            var buffer = ArrayPool<char>.Shared.Rent(GetNumBase64CharsRequiredForInput(count));
             int numBase64Chars = Convert.ToBase64CharArray(input, offset, count, buffer, 0);
 
             // Fix up '+' -> '-' and '/' -> '_'
@@ -144,13 +148,17 @@ namespace Microsoft.AspNetCore.WebUtilities
                 else if (ch == '=')
                 {
                     // We've reached a padding character: truncate the string from this point
-                    return new String(buffer, 0, i);
+                    var encodedPadded = new String(buffer, 0, i);
+                    ArrayPool<char>.Shared.Return(buffer);
+                    return encodedPadded;
                 }
             }
 
             // If we got this far, the buffer didn't contain any padding chars, so turn
             // it directly into a string.
-            return new String(buffer, 0, numBase64Chars);
+            var encoded = new String(buffer, 0, numBase64Chars);
+            ArrayPool<char>.Shared.Return(buffer);
+            return encoded;
         }
 
         private static int GetNumBase64CharsRequiredForInput(int inputLength)
