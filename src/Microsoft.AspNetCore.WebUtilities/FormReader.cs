@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See License.txt in the project root for license information.
 
 using System;
+using System.Buffers;
 using System.Collections.Generic;
 using System.IO;
 using System.Text;
@@ -14,13 +15,14 @@ namespace Microsoft.AspNetCore.WebUtilities
     /// <summary>
     /// Used to read an 'application/x-www-form-urlencoded' form.
     /// </summary>
-    public class FormReader
+    public class FormReader : IDisposable
     {
         private readonly TextReader _reader;
-        private readonly char[] _buffer = new char[1024];
+        private readonly char[] _buffer;
         private readonly StringBuilder _builder = new StringBuilder();
         private int _bufferOffset;
         private int _bufferCount;
+        private bool _disposed;
 
         public FormReader(string data)
         {
@@ -29,6 +31,7 @@ namespace Microsoft.AspNetCore.WebUtilities
                 throw new ArgumentNullException(nameof(data));
             }
 
+            _buffer = ArrayPool<char>.Shared.Rent(1024);
             _reader = new StringReader(data);
         }
 
@@ -44,6 +47,7 @@ namespace Microsoft.AspNetCore.WebUtilities
                 throw new ArgumentNullException(nameof(encoding));
             }
 
+            _buffer = ArrayPool<char>.Shared.Rent(1024);
             _reader = new StreamReader(stream, encoding, detectEncodingFromByteOrderMarks: true, bufferSize: 1024 * 2, leaveOpen: true);
         }
 
@@ -167,17 +171,18 @@ namespace Microsoft.AspNetCore.WebUtilities
         /// <returns>The collection containing the parsed HTTP form body.</returns>
         public static Dictionary<string, StringValues> ReadForm(string text)
         {
-            var reader = new FormReader(text);
-
-            var accumulator = new KeyValueAccumulator();
-            var pair = reader.ReadNextPair();
-            while (pair.HasValue)
+            using (var reader = new FormReader(text))
             {
-                accumulator.Append(pair.Value.Key, pair.Value.Value);
-                pair = reader.ReadNextPair();
-            }
+                var accumulator = new KeyValueAccumulator();
+                var pair = reader.ReadNextPair();
+                while (pair.HasValue)
+                {
+                    accumulator.Append(pair.Value.Key, pair.Value.Value);
+                    pair = reader.ReadNextPair();
+                }
 
-            return accumulator.GetResults();
+                return accumulator.GetResults();
+            }
         }
 
         /// <summary>
@@ -197,17 +202,27 @@ namespace Microsoft.AspNetCore.WebUtilities
         /// <returns>The collection containing the parsed HTTP form body.</returns>
         public static async Task<Dictionary<string, StringValues>> ReadFormAsync(Stream stream, Encoding encoding, CancellationToken cancellationToken = new CancellationToken())
         {
-            var reader = new FormReader(stream, encoding);
-
-            var accumulator = new KeyValueAccumulator();
-            var pair = await reader.ReadNextPairAsync(cancellationToken);
-            while (pair.HasValue)
+            using (var reader = new FormReader(stream, encoding))
             {
-                accumulator.Append(pair.Value.Key, pair.Value.Value);
-                pair = await reader.ReadNextPairAsync(cancellationToken);
-            }
+                var accumulator = new KeyValueAccumulator();
+                var pair = await reader.ReadNextPairAsync(cancellationToken);
+                while (pair.HasValue)
+                {
+                    accumulator.Append(pair.Value.Key, pair.Value.Value);
+                    pair = await reader.ReadNextPairAsync(cancellationToken);
+                }
 
-            return accumulator.GetResults();
+                return accumulator.GetResults();
+            }
+        }
+
+        public void Dispose()
+        {
+            if (!_disposed)
+            {
+                _disposed = true;
+                ArrayPool<char>.Shared.Return(_buffer);
+            }
         }
     }
 }
