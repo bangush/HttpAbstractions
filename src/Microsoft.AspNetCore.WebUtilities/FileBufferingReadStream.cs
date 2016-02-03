@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See License.txt in the project root for license information.
 
 using System;
+using System.Buffers;
 using System.Diagnostics;
 using System.IO;
 using System.Threading;
@@ -17,11 +18,13 @@ namespace Microsoft.AspNetCore.WebUtilities
     public class FileBufferingReadStream : Stream
     {
         private readonly Stream _inner;
+        private readonly ArrayPool<byte> _bytePool;
         private readonly int _memoryThreshold;
         private string _tempFileDirectory;
         private readonly Func<string> _tempFileDirectoryAccessor;
 
-        private Stream _buffer = new MemoryStream(); // TODO: We could have a more efficiently expanding buffer stream.
+        private Stream _buffer;
+        private byte[] _rentedBuffer;
         private bool _inMemory = true;
         private bool _completelyBuffered;
 
@@ -32,6 +35,15 @@ namespace Microsoft.AspNetCore.WebUtilities
             Stream inner,
             int memoryThreshold,
             Func<string> tempFileDirectoryAccessor)
+            : this(inner, memoryThreshold, tempFileDirectoryAccessor, ArrayPool<byte>.Shared)
+        {
+        }
+
+        public FileBufferingReadStream(
+            Stream inner,
+            int memoryThreshold,
+            Func<string> tempFileDirectoryAccessor,
+            ArrayPool<byte> bytePool)
         {
             if (inner == null)
             {
@@ -43,6 +55,17 @@ namespace Microsoft.AspNetCore.WebUtilities
                 throw new ArgumentNullException(nameof(tempFileDirectoryAccessor));
             }
 
+            _bytePool = bytePool;
+            if (memoryThreshold < 1024 * 1024)
+            {
+                _rentedBuffer = bytePool.Rent(memoryThreshold);
+                _buffer = new MemoryStream(_rentedBuffer);
+            }
+            else
+            {
+                _buffer = new MemoryStream();
+            }
+
             _inner = inner;
             _memoryThreshold = memoryThreshold;
             _tempFileDirectoryAccessor = tempFileDirectoryAccessor;
@@ -50,6 +73,14 @@ namespace Microsoft.AspNetCore.WebUtilities
 
         // TODO: allow for an optional buffer size limit to prevent filling hard disks. 1gb?
         public FileBufferingReadStream(Stream inner, int memoryThreshold, string tempFileDirectory)
+        {
+        }
+
+        public FileBufferingReadStream(
+            Stream inner, 
+            int memoryThreshold, 
+            string tempFileDirectory,
+            ArrayPool<byte> bytePool)
         {
             if (inner == null)
             {
@@ -59,6 +90,17 @@ namespace Microsoft.AspNetCore.WebUtilities
             if (tempFileDirectory == null)
             {
                 throw new ArgumentNullException(nameof(tempFileDirectory));
+            }
+
+            _bytePool = bytePool;
+            if (memoryThreshold < 1024 * 1024)
+            {
+                _rentedBuffer = bytePool.Rent(memoryThreshold);
+                _buffer = new MemoryStream(_rentedBuffer);
+            }
+            else
+            {
+                _buffer = new MemoryStream();
             }
 
             _inner = inner;
@@ -145,11 +187,15 @@ namespace Microsoft.AspNetCore.WebUtilities
 
             if (_inMemory && _buffer.Length + read > _memoryThreshold)
             {
-                var oldBuffer = _buffer;
-                _buffer = CreateTempFile();
                 _inMemory = false;
-                oldBuffer.Position = 0;
-                oldBuffer.CopyTo(_buffer, 1024 * 16);
+                checked
+                {
+                    int length = (int)_buffer.Length;
+                    _buffer = CreateTempFile();
+                    _buffer.Write(_rentedBuffer, 0, length);
+                    _bytePool.Return(_rentedBuffer);
+                    _rentedBuffer = null;
+                }
             }
 
             if (read > 0)
@@ -216,11 +262,15 @@ namespace Microsoft.AspNetCore.WebUtilities
 
             if (_inMemory && _buffer.Length + read > _memoryThreshold)
             {
-                var oldBuffer = _buffer;
-                _buffer = CreateTempFile();
                 _inMemory = false;
-                oldBuffer.Position = 0;
-                await oldBuffer.CopyToAsync(_buffer, 1024 * 16, cancellationToken);
+                checked
+                {
+                    int length = (int)_buffer.Length;
+                    _buffer = CreateTempFile();
+                    await _buffer.WriteAsync(_rentedBuffer, 0, length, cancellationToken);
+                    _bytePool.Return(_rentedBuffer);
+                    _rentedBuffer = null;
+                }
             }
 
             if (read > 0)
@@ -270,6 +320,11 @@ namespace Microsoft.AspNetCore.WebUtilities
             if (!_disposed)
             {
                 _disposed = true;
+                if (_rentedBuffer != null)
+                {
+                    _bytePool.Return(_rentedBuffer);
+                }
+
                 if (disposing)
                 {
                     _buffer.Dispose();

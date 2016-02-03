@@ -1,6 +1,7 @@
 // Copyright (c) .NET Foundation. All rights reserved.
 // Licensed under the Apache License, Version 2.0. See License.txt in the project root for license information.
 
+using System.Buffers;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
@@ -9,14 +10,25 @@ namespace Microsoft.AspNetCore.WebUtilities
 {
     public static class StreamHelperExtensions
     {
-        public static async Task DrainAsync(this Stream stream, CancellationToken cancellationToken)
+        public static Task DrainAsync(this Stream stream, CancellationToken cancellationToken)
         {
-            byte[] buffer = new byte[1024];
+            return stream.DrainAsync(cancellationToken, ArrayPool<byte>.Shared);
+        }
+        public static async Task DrainAsync(this Stream stream, CancellationToken cancellationToken, ArrayPool<byte> bytePool)
+        {
             cancellationToken.ThrowIfCancellationRequested();
-            while (await stream.ReadAsync(buffer, 0, buffer.Length, cancellationToken) > 0)
+            var buffer = bytePool.Rent(1024);
+            try
             {
-                // Not all streams support cancellation directly.
-                cancellationToken.ThrowIfCancellationRequested();
+                while (await stream.ReadAsync(buffer, 0, buffer.Length, cancellationToken) > 0)
+                {
+                    // Not all streams support cancellation directly.
+                    cancellationToken.ThrowIfCancellationRequested();
+                }
+            }
+            finally
+            {
+                bytePool.Return(buffer);
             }
         }
     }
