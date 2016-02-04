@@ -19,6 +19,7 @@ namespace Microsoft.AspNetCore.WebUtilities
     {
         private readonly TextReader _reader;
         private readonly char[] _buffer;
+        private readonly ArrayPool<byte> _bytePool;
         private readonly ArrayPool<char> _charPool;
         private readonly StringBuilder _builder = new StringBuilder();
         private int _bufferOffset;
@@ -26,28 +27,29 @@ namespace Microsoft.AspNetCore.WebUtilities
         private bool _disposed;
 
         public FormReader(string data)
-            : this(data, ArrayPool<char>.Shared)
+            : this(data, ArrayPool<byte>.Shared, ArrayPool<char>.Shared)
         {
         }
 
-        public FormReader(string data, ArrayPool<char> charPool)
+        public FormReader(string data, ArrayPool<byte> bytePool, ArrayPool<char> charPool)
         {
             if (data == null)
             {
                 throw new ArgumentNullException(nameof(data));
             }
 
-            _buffer = charPool.Rent(1024);
+            _buffer = charPool.Rent(8192);
             _charPool = charPool;
+            _bytePool = bytePool;
             _reader = new StringReader(data);
         }
 
         public FormReader(Stream stream, Encoding encoding)
-            : this(stream, encoding, ArrayPool<char>.Shared)
+            : this(stream, encoding, ArrayPool<byte>.Shared, ArrayPool<char>.Shared)
         {
         }
 
-        public FormReader(Stream stream, Encoding encoding, ArrayPool<char> charPool)
+        public FormReader(Stream stream, Encoding encoding, ArrayPool<byte> bytePool, ArrayPool<char> charPool)
         {
             if (stream == null)
             {
@@ -59,8 +61,9 @@ namespace Microsoft.AspNetCore.WebUtilities
                 throw new ArgumentNullException(nameof(encoding));
             }
 
-            _buffer = charPool.Rent(1024);
+            _buffer = charPool.Rent(8192);
             _charPool = charPool;
+            _bytePool = bytePool;
             _reader = new StreamReader(stream, encoding, detectEncodingFromByteOrderMarks: true, bufferSize: 1024 * 2, leaveOpen: true);
         }
 
@@ -87,14 +90,50 @@ namespace Microsoft.AspNetCore.WebUtilities
         /// </summary>
         /// <param name="cancellationToken"></param>
         /// <returns>The next key value pair, or null when the end of the form is reached.</returns>
-        public async Task<KeyValuePair<string, string>?> ReadNextPairAsync(CancellationToken cancellationToken)
+        public ValueTask<KeyValuePair<string, string>?> ReadNextPairAsync(CancellationToken cancellationToken)
         {
-            var key = await ReadWordAsync('=', cancellationToken);
+            var keyTask = ReadWordAsync('=', cancellationToken);
+            if (!keyTask.IsCompletedSuccessfully)
+            {
+                return ReadNextPairAsyncKeyAwaited(keyTask.AsTask(), cancellationToken);
+            }
+            var key = keyTask.Result;
+            if (string.IsNullOrEmpty(key) && _bufferCount == 0)
+            {
+                return (KeyValuePair<string, string>?)null;
+            }
+
+            var valueTask = ReadWordAsync('&', cancellationToken);
+            if (!valueTask.IsCompletedSuccessfully)
+            {
+                return ReadNextPairAsyncValueAwaited(key, valueTask.AsTask(), cancellationToken);
+            }
+
+            var value = valueTask.Result;
+            return new KeyValuePair<string, string>(key, value);
+        }
+
+        private async Task<KeyValuePair<string, string>?> ReadNextPairAsyncKeyAwaited(Task<string> keyTask, CancellationToken cancellationToken)
+        {
+            var key = await keyTask;
             if (string.IsNullOrEmpty(key) && _bufferCount == 0)
             {
                 return null;
             }
-            var value = await ReadWordAsync('&', cancellationToken);
+
+            var valueTask = ReadWordAsync('&', cancellationToken);
+            if (!valueTask.IsCompletedSuccessfully)
+            {
+                var value = await valueTask;
+                return new KeyValuePair<string, string>(key, value);
+            }
+
+            return new KeyValuePair<string, string>(key, valueTask.Result);
+        }
+
+        private async Task<KeyValuePair<string, string>?> ReadNextPairAsyncValueAwaited(string key, Task<string> valueTask, CancellationToken cancellationToken)
+        {
+            var value = await valueTask;
             return new KeyValuePair<string, string>(key, value);
         }
 
@@ -109,24 +148,33 @@ namespace Microsoft.AspNetCore.WebUtilities
                     Buffer();
                 }
 
-                // End
-                if (_bufferCount == 0)
+                var word = ReadWordImpl(seperator);
+                if (word != null)
                 {
-                    return BuildWord();
+                    return word;
                 }
-
-                var c = _buffer[_bufferOffset++];
-                _bufferCount--;
-
-                if (c == seperator)
-                {
-                    return BuildWord();
-                }
-                _builder.Append(c);
             }
         }
 
-        private async Task<string> ReadWordAsync(char seperator, CancellationToken cancellationToken)
+        private ValueTask<string> ReadWordAsync(char seperator, CancellationToken cancellationToken)
+        {
+            // TODO: Configurable value size limit
+            while (true)
+            {
+                // Empty
+                if (_bufferCount == 0)
+                {
+                    return ReadWordAsyncAwaited(seperator, cancellationToken);
+                }
+
+                var word = ReadWordImpl(seperator);
+                if (word != null)
+                {
+                    return word;
+                }
+            }
+        }
+        private async Task<string> ReadWordAsyncAwaited(char seperator, CancellationToken cancellationToken)
         {
             // TODO: Configurable value size limit
             while (true)
@@ -137,21 +185,32 @@ namespace Microsoft.AspNetCore.WebUtilities
                     await BufferAsync(cancellationToken);
                 }
 
-                // End
-                if (_bufferCount == 0)
+                var word = ReadWordImpl(seperator);
+                if (word != null)
                 {
-                    return BuildWord();
+                    return word;
                 }
-
-                var c = _buffer[_bufferOffset++];
-                _bufferCount--;
-
-                if (c == seperator)
-                {
-                    return BuildWord();
-                }
-                _builder.Append(c);
             }
+        }
+
+        private string ReadWordImpl(char seperator)
+        {
+            // End
+            if (_bufferCount == 0)
+            {
+                return BuildWord();
+            }
+
+            var c = _buffer[_bufferOffset++];
+            _bufferCount--;
+
+            if (c == seperator)
+            {
+                return BuildWord();
+            }
+            _builder.Append(c);
+
+            return null;
         }
 
         // '+' un-escapes to ' ', %HH un-escapes as ASCII (or utf-8?)
@@ -204,7 +263,7 @@ namespace Microsoft.AspNetCore.WebUtilities
         /// <param name="stream">The HTTP form body to parse.</param>
         /// <param name="cancellationToken">The <see cref="CancellationToken"/>.</param>
         /// <returns>The collection containing the parsed HTTP form body.</returns>
-        public static Task<Dictionary<string, StringValues>> ReadFormAsync(Stream stream, CancellationToken cancellationToken = new CancellationToken())
+        public static ValueTask<Dictionary<string, StringValues>> ReadFormAsync(Stream stream, CancellationToken cancellationToken = default(CancellationToken))
         {
             return ReadFormAsync(stream, Encoding.UTF8, cancellationToken);
         }
@@ -216,12 +275,52 @@ namespace Microsoft.AspNetCore.WebUtilities
         /// <param name="encoding">The character encoding to use.</param>
         /// <param name="cancellationToken">The <see cref="CancellationToken"/>.</param>
         /// <returns>The collection containing the parsed HTTP form body.</returns>
-        public static async Task<Dictionary<string, StringValues>> ReadFormAsync(Stream stream, Encoding encoding, CancellationToken cancellationToken = new CancellationToken())
+        public static ValueTask<Dictionary<string, StringValues>> ReadFormAsync(Stream stream, Encoding encoding, CancellationToken cancellationToken = default(CancellationToken))
         {
-            using (var reader = new FormReader(stream, encoding))
+            var isAsync = false;
+            var reader = new FormReader(stream, encoding);
+            try
             {
                 var accumulator = new KeyValueAccumulator();
-                var pair = await reader.ReadNextPairAsync(cancellationToken);
+
+                var pairTask = reader.ReadNextPairAsync(cancellationToken);
+                if (!pairTask.IsCompletedSuccessfully)
+                {
+                    isAsync = true;
+                    return ReadFormAsyncAwaited(pairTask.AsTask(), reader, accumulator, cancellationToken);
+                }
+
+                var pair = pairTask.Result;
+                while (pair.HasValue)
+                {
+                    accumulator.Append(pair.Value.Key, pair.Value.Value);
+
+                    pairTask = reader.ReadNextPairAsync(cancellationToken);
+                    if (!pairTask.IsCompletedSuccessfully)
+                    {
+                        isAsync = true;
+                        return ReadFormAsyncAwaited(pairTask.AsTask(), reader, accumulator, cancellationToken);
+                    }
+
+                    pair = pairTask.Result;
+                }
+
+                return accumulator.GetResults();
+            }
+            finally
+            {
+                if (!isAsync)
+                {
+                    reader.Dispose();
+                }
+            }
+        }
+
+        private static async Task<Dictionary<string, StringValues>> ReadFormAsyncAwaited(Task<KeyValuePair<string, string>?> pairTask, FormReader reader, KeyValueAccumulator accumulator, CancellationToken cancellationToken)
+        {
+            using (reader)
+            {
+                var pair = await pairTask;
                 while (pair.HasValue)
                 {
                     accumulator.Append(pair.Value.Key, pair.Value.Value);

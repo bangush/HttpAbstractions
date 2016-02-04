@@ -25,6 +25,7 @@ namespace Microsoft.AspNetCore.WebUtilities
 
         private Stream _buffer;
         private byte[] _rentedBuffer;
+        private int _readIntoBuffer = 0;
         private bool _inMemory = true;
         private bool _completelyBuffered;
 
@@ -73,6 +74,7 @@ namespace Microsoft.AspNetCore.WebUtilities
 
         // TODO: allow for an optional buffer size limit to prevent filling hard disks. 1gb?
         public FileBufferingReadStream(Stream inner, int memoryThreshold, string tempFileDirectory)
+            : this (inner, memoryThreshold, tempFileDirectory, ArrayPool<byte>.Shared)
         {
         }
 
@@ -177,26 +179,27 @@ namespace Microsoft.AspNetCore.WebUtilities
         public override int Read(byte[] buffer, int offset, int count)
         {
             ThrowIfDisposed();
-            if (_buffer.Position < _buffer.Length || _completelyBuffered)
+            if (_buffer.Position < _readIntoBuffer || _completelyBuffered)
             {
                 // Just read from the buffer
-                return _buffer.Read(buffer, offset, (int)Math.Min(count, _buffer.Length - _buffer.Position));
+                return _buffer.Read(buffer, offset, (int)Math.Min(count, _readIntoBuffer - _buffer.Position));
             }
 
             int read = _inner.Read(buffer, offset, count);
 
-            if (_inMemory && _buffer.Length + read > _memoryThreshold)
+            if (_inMemory && _readIntoBuffer + read > _memoryThreshold)
             {
                 _inMemory = false;
                 checked
                 {
-                    int length = (int)_buffer.Length;
+                    int length = _readIntoBuffer;
                     _buffer = CreateTempFile();
                     _buffer.Write(_rentedBuffer, 0, length);
                     _bytePool.Return(_rentedBuffer);
                     _rentedBuffer = null;
                 }
             }
+            _readIntoBuffer += read;
 
             if (read > 0)
             {
@@ -252,26 +255,27 @@ namespace Microsoft.AspNetCore.WebUtilities
         public override async Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
         {
             ThrowIfDisposed();
-            if (_buffer.Position < _buffer.Length || _completelyBuffered)
+            if (_buffer.Position < _readIntoBuffer || _completelyBuffered)
             {
                 // Just read from the buffer
-                return await _buffer.ReadAsync(buffer, offset, (int)Math.Min(count, _buffer.Length - _buffer.Position), cancellationToken);
+                return await _buffer.ReadAsync(buffer, offset, (int)Math.Min(count, _readIntoBuffer - _buffer.Position), cancellationToken);
             }
 
             int read = await _inner.ReadAsync(buffer, offset, count, cancellationToken);
 
-            if (_inMemory && _buffer.Length + read > _memoryThreshold)
+            if (_inMemory && _readIntoBuffer + read > _memoryThreshold)
             {
                 _inMemory = false;
                 checked
                 {
-                    int length = (int)_buffer.Length;
+                    int length = _readIntoBuffer;
                     _buffer = CreateTempFile();
                     await _buffer.WriteAsync(_rentedBuffer, 0, length, cancellationToken);
                     _bytePool.Return(_rentedBuffer);
                     _rentedBuffer = null;
                 }
             }
+            _readIntoBuffer += read;
 
             if (read > 0)
             {
