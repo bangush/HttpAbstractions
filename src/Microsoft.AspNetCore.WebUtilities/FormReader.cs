@@ -19,6 +19,7 @@ namespace Microsoft.AspNetCore.WebUtilities
     {
         private readonly TextReader _reader;
         private readonly char[] _buffer;
+        private readonly ArrayPool<byte> _bytePool;
         private readonly ArrayPool<char> _charPool;
         private readonly StringBuilder _builder = new StringBuilder();
         private int _bufferOffset;
@@ -26,11 +27,11 @@ namespace Microsoft.AspNetCore.WebUtilities
         private bool _disposed;
 
         public FormReader(string data)
-            : this(data, ArrayPool<char>.Shared)
+            : this(data, ArrayPool<byte>.Shared, ArrayPool<char>.Shared)
         {
         }
 
-        public FormReader(string data, ArrayPool<char> charPool)
+        public FormReader(string data, ArrayPool<byte> bytePool, ArrayPool<char> charPool)
         {
             if (data == null)
             {
@@ -39,15 +40,16 @@ namespace Microsoft.AspNetCore.WebUtilities
 
             _buffer = charPool.Rent(1024);
             _charPool = charPool;
+            _bytePool = bytePool;
             _reader = new StringReader(data);
         }
 
         public FormReader(Stream stream, Encoding encoding)
-            : this(stream, encoding, ArrayPool<char>.Shared)
+            : this(stream, encoding, ArrayPool<byte>.Shared, ArrayPool<char>.Shared)
         {
         }
 
-        public FormReader(Stream stream, Encoding encoding, ArrayPool<char> charPool)
+        public FormReader(Stream stream, Encoding encoding, ArrayPool<byte> bytePool, ArrayPool<char> charPool)
         {
             if (stream == null)
             {
@@ -61,6 +63,7 @@ namespace Microsoft.AspNetCore.WebUtilities
 
             _buffer = charPool.Rent(1024);
             _charPool = charPool;
+            _bytePool = bytePool;
             _reader = new StreamReader(stream, encoding, detectEncodingFromByteOrderMarks: true, bufferSize: 1024 * 2, leaveOpen: true);
         }
 
@@ -157,10 +160,13 @@ namespace Microsoft.AspNetCore.WebUtilities
         // '+' un-escapes to ' ', %HH un-escapes as ASCII (or utf-8?)
         private string BuildWord()
         {
-            _builder.Replace('+', ' ');
-            var result = _builder.ToString();
+            if (_builder.Length == 0)
+            {
+                return string.Empty;
+            }
+            var result = UrlDecode(_builder, _bytePool, _charPool);
             _builder.Clear();
-            return Uri.UnescapeDataString(result); // TODO: Replace this, it's not completely accurate.
+            return result;
         }
 
         private void Buffer()
@@ -235,6 +241,164 @@ namespace Microsoft.AspNetCore.WebUtilities
             {
                 _disposed = true;
                 _charPool.Return(_buffer);
+            }
+        }
+
+        // Algorithm from https://github.com/dotnet/corefx/blob/ac67ffac987d0c27236c4a6cf1255c2bcbc7fe7d/src/System.Runtime.Extensions/src/System/Net/WebUtility.cs#L378
+        // but accepting StringBuilder
+        private string UrlDecode(StringBuilder value, ArrayPool<byte> bytePool, ArrayPool<char> charPool)
+        {
+            if (value == null)
+            {
+                return null;
+            }
+
+            var count = value.Length;
+            UrlDecoder helper = new UrlDecoder(count, Encoding.UTF8, bytePool, charPool);
+
+            // go through the string's chars collapsing %XX and
+            // appending each char as char, with exception of %XX constructs
+            // that are appended as bytes
+
+            for (var pos = 0; pos < count; pos++)
+            {
+                var ch = value[pos];
+
+                if (ch == '+')
+                {
+                    ch = ' ';
+                }
+                else if (ch == '%' && pos < count - 2)
+                {
+                    var h1 = HexToInt(value[pos + 1]);
+                    var h2 = HexToInt(value[pos + 2]);
+
+                    if (h1 >= 0 && h2 >= 0)
+                    {     // valid 2 hex chars
+                        var b = (byte)((h1 << 4) | h2);
+                        pos += 2;
+
+                        // don't add as char
+                        helper.AddByte(b);
+                        continue;
+                    }
+                }
+
+                if ((ch & 0xFF80) == 0)
+                {
+                    helper.AddByte((byte)ch); // 7 bit have to go as bytes because of Unicode
+                }
+                else
+                {
+                    helper.AddChar(ch);
+                }
+            }
+
+            var decodedString = helper.GetString();
+            helper.Dispose();
+
+            return decodedString;
+        }
+
+        // from https://github.com/dotnet/corefx/blob/ac67ffac987d0c27236c4a6cf1255c2bcbc7fe7d/src/System.Runtime.Extensions/src/System/Net/WebUtility.cs#L529
+        // as private static there
+        private static int HexToInt(char h)
+        {
+            return (h >= '0' && h <= '9') ? h - '0' :
+            (h >= 'a' && h <= 'f') ? h - 'a' + 10 :
+            (h >= 'A' && h <= 'F') ? h - 'A' + 10 :
+            -1;
+        }
+
+        // from https://github.com/dotnet/corefx/blob/ac67ffac987d0c27236c4a6cf1255c2bcbc7fe7d/src/System.Runtime.Extensions/src/System/Net/WebUtility.cs#L610
+        // but lower allocation struct
+        private struct UrlDecoder
+        {
+            private int _bufferSize;
+
+            // Accumulate characters in a special array
+            private int _numChars;
+            private char[] _charBuffer;
+
+            // Accumulate bytes for decoding into characters in a special array
+            private int _numBytes;
+            private byte[] _byteBuffer;
+
+            // Encoding to convert chars to bytes
+            private Encoding _encoding;
+
+            private ArrayPool<byte> _bytePool;
+            private ArrayPool<char> _charPool;
+
+            public UrlDecoder(int bufferSize, Encoding encoding, ArrayPool<byte> bytePool, ArrayPool<char> charPool)
+            {
+                _bufferSize = bufferSize;
+                _encoding = encoding;
+                _numChars = 0;
+                _numBytes = 0;
+
+                _bytePool = bytePool;
+                _charPool = charPool;
+
+                _byteBuffer = null;
+                _charBuffer = charPool.Rent(bufferSize);
+                // byte buffer created on demand
+            }
+
+            private void FlushBytes()
+            {
+                if (_numBytes > 0)
+                {
+                    _numChars += _encoding.GetChars(_byteBuffer, 0, _numBytes, _charBuffer, _numChars);
+                    _numBytes = 0;
+                }
+            }
+
+            public void AddChar(char ch)
+            {
+                if (_numBytes > 0)
+                {
+                    FlushBytes();
+                }
+
+                _charBuffer[_numChars++] = ch;
+            }
+
+            public void AddByte(byte b)
+            {
+                if (_byteBuffer == null)
+                {
+                    _byteBuffer = _bytePool.Rent(_bufferSize);
+                }
+
+                _byteBuffer[_numBytes++] = b;
+            }
+
+            public string GetString()
+            {
+                if (_numBytes > 0)
+                {
+                    FlushBytes();
+                }
+
+                if (_numChars > 0)
+                {
+                    return new string(_charBuffer, 0, _numChars);
+                }
+                else
+                {
+                    return string.Empty;
+                }
+            }
+
+            public void Dispose()
+            {
+                _charPool.Return(_charBuffer);
+
+                if (_byteBuffer != null)
+                {
+                    _bytePool.Return(_byteBuffer);
+                }
             }
         }
     }
