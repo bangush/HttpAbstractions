@@ -73,6 +73,7 @@ namespace Microsoft.AspNetCore.WebUtilities
 
         // TODO: allow for an optional buffer size limit to prevent filling hard disks. 1gb?
         public FileBufferingReadStream(Stream inner, int memoryThreshold, string tempFileDirectory)
+            : this (inner, memoryThreshold, tempFileDirectory, ArrayPool<byte>.Shared)
         {
         }
 

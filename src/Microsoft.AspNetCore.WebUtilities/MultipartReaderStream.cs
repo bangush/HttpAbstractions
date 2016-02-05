@@ -242,6 +242,7 @@ namespace Microsoft.AspNetCore.WebUtilities
                 // or -- for the final boundary.
                 var boundary = _bytePool.Rent(_boundaryBytes.Length);
                 read = _innerStream.Read(boundary, 0, _boundaryBytes.Length);
+                _bytePool.Return(boundary);
                 Debug.Assert(read == _boundaryBytes.Length); // It should have all been buffered
                 var remainder = _innerStream.ReadLine(lengthLimit: 100); // Whitespace may exceed the buffer.
                 remainder = remainder.Trim();
@@ -249,7 +250,6 @@ namespace Microsoft.AspNetCore.WebUtilities
                 {
                     FinalBoundaryFound = true;
                 }
-                _bytePool.Return(boundary);
                 Debug.Assert(FinalBoundaryFound || string.Equals(string.Empty, remainder, StringComparison.Ordinal), "Un-expected data found on the boundary line: " + remainder);
                 _finished = true;
                 return 0;
@@ -294,6 +294,7 @@ namespace Microsoft.AspNetCore.WebUtilities
                 // or -- for the final boundary.
                 var boundary = _bytePool.Rent(_boundaryBytes.Length);
                 read = _innerStream.Read(boundary, 0, _boundaryBytes.Length);
+                _bytePool.Return(boundary);
                 Debug.Assert(read == _boundaryBytes.Length); // It should have all been buffered
                 var remainder = await _innerStream.ReadLineAsync(lengthLimit: 100, cancellationToken: cancellationToken); // Whitespace may exceed the buffer.
                 remainder = remainder.Trim();
@@ -301,7 +302,6 @@ namespace Microsoft.AspNetCore.WebUtilities
                 {
                     FinalBoundaryFound = true;
                 }
-                _bytePool.Return(boundary);
                 Debug.Assert(FinalBoundaryFound || string.Equals(string.Empty, remainder, StringComparison.Ordinal), "Un-expected data found on the boundary line: " + remainder);
 
                 _finished = true;
