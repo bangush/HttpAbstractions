@@ -9,7 +9,7 @@ namespace Microsoft.AspNetCore.Http.Internal
 {
     public static class BufferingHelper
     {
-        internal const int DefaultBufferThreshold = 1024 * 30;
+        internal const int DefaultBufferThreshold = 32768;
 
         private readonly static Func<string> _getTempDirectory = () => TempDirectory;
 
