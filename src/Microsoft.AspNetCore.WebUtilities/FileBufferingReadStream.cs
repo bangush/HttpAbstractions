@@ -17,6 +17,7 @@ namespace Microsoft.AspNetCore.WebUtilities
     /// </summary>
     public class FileBufferingReadStream : Stream
     {
+        private const int _maxRentedBufferSize = 1024 * 1024; // 1MB
         private readonly Stream _inner;
         private readonly ArrayPool<byte> _bytePool;
         private readonly int _memoryThreshold;
@@ -25,7 +26,7 @@ namespace Microsoft.AspNetCore.WebUtilities
 
         private Stream _buffer;
         private byte[] _rentedBuffer;
-        private int _readIntoBuffer = 0;
+        private int _readIntoBuffer;
         private bool _inMemory = true;
         private bool _completelyBuffered;
 
@@ -57,7 +58,7 @@ namespace Microsoft.AspNetCore.WebUtilities
             }
 
             _bytePool = bytePool;
-            if (memoryThreshold < 1024 * 1024)
+            if (memoryThreshold < _maxRentedBufferSize)
             {
                 _rentedBuffer = bytePool.Rent(memoryThreshold);
                 _buffer = new MemoryStream(_rentedBuffer);
@@ -95,7 +96,7 @@ namespace Microsoft.AspNetCore.WebUtilities
             }
 
             _bytePool = bytePool;
-            if (memoryThreshold < 1024 * 1024)
+            if (memoryThreshold < _maxRentedBufferSize)
             {
                 _rentedBuffer = bytePool.Rent(memoryThreshold);
                 _buffer = new MemoryStream(_rentedBuffer);

@@ -17,6 +17,7 @@ namespace Microsoft.AspNetCore.WebUtilities
     /// </summary>
     public class FormReader : IDisposable
     {
+        private const int _rentedCharPoolLength = 8192;
         private readonly TextReader _reader;
         private readonly char[] _buffer;
         private readonly ArrayPool<byte> _bytePool;
@@ -38,7 +39,7 @@ namespace Microsoft.AspNetCore.WebUtilities
                 throw new ArgumentNullException(nameof(data));
             }
 
-            _buffer = charPool.Rent(8192);
+            _buffer = charPool.Rent(_rentedCharPoolLength);
             _charPool = charPool;
             _bytePool = bytePool;
             _reader = new StringReader(data);
@@ -61,7 +62,7 @@ namespace Microsoft.AspNetCore.WebUtilities
                 throw new ArgumentNullException(nameof(encoding));
             }
 
-            _buffer = charPool.Rent(8192);
+            _buffer = charPool.Rent(_rentedCharPoolLength);
             _charPool = charPool;
             _bytePool = bytePool;
             _reader = new StreamReader(stream, encoding, detectEncodingFromByteOrderMarks: true, bufferSize: 1024 * 2, leaveOpen: true);

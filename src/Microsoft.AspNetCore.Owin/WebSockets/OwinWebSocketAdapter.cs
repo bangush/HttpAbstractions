@@ -34,6 +34,7 @@ namespace Microsoft.AspNetCore.Owin
 
     public class OwinWebSocketAdapter : WebSocket
     {
+        private const int _rentedBufferSize = 1024;
         private IDictionary<string, object> _websocketContext;
         private WebSocketSendAsync _sendAsync;
         private WebSocketReceiveAsync _receiveAsync;
@@ -127,7 +128,7 @@ namespace Microsoft.AspNetCore.Owin
                 await CloseOutputAsync(closeStatus, statusDescription, cancellationToken);
             }
 
-            var buffer = ArrayPool<byte>.Shared.Rent(1024);
+            var buffer = ArrayPool<byte>.Shared.Rent(_rentedBufferSize);
             try
             {
                 while (State == WebSocketState.CloseSent)

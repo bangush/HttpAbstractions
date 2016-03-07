@@ -10,14 +10,17 @@ namespace Microsoft.AspNetCore.WebUtilities
 {
     public static class StreamHelperExtensions
     {
+        private const int _maxReadBufferSize = 1024;
+
         public static Task DrainAsync(this Stream stream, CancellationToken cancellationToken)
         {
             return stream.DrainAsync(ArrayPool<byte>.Shared, cancellationToken);
         }
+
         public static async Task DrainAsync(this Stream stream, ArrayPool<byte> bytePool, CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var buffer = bytePool.Rent(1024);
+            var buffer = bytePool.Rent(_maxReadBufferSize);
             try
             {
                 while (await stream.ReadAsync(buffer, 0, buffer.Length, cancellationToken) > 0)
