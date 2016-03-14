@@ -23,7 +23,7 @@
     "net451": {
       "frameworkAssemblies": {
         "System.Runtime": { "type": "build" },
-        "System.Threading.Tasks": "4.0.0.0"
+        "System.Threading.Tasks": { "type": "build" }
       }
     },
     "netstandard1.3": {
