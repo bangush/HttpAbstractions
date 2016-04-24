@@ -5,6 +5,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.CompilerServices;
 
 namespace Microsoft.AspNetCore.Http.Features
 {
@@ -31,43 +32,6 @@ namespace Microsoft.AspNetCore.Http.Features
 
         public bool IsReadOnly { get { return false; } }
 
-        public object this[Type key]
-        {
-            get
-            {
-                if (key == null)
-                {
-                    throw new ArgumentNullException(nameof(key));
-                }
-
-                object result;
-                return _features != null && _features.TryGetValue(key, out result) ? result : _defaults?[key];
-            }
-            set
-            {
-                if (key == null)
-                {
-                    throw new ArgumentNullException(nameof(key));
-                }
-
-                if (value == null)
-                {
-                    if (_features != null && _features.Remove(key))
-                    {
-                        _containerRevision++;
-                    }
-                    return;
-                }
-
-                if (_features == null)
-                {
-                    _features = new Dictionary<Type, object>();
-                }
-                _features[key] = value;
-                _containerRevision++;
-            }
-        }
-
         IEnumerator IEnumerable.GetEnumerator()
         {
             return GetEnumerator();
@@ -93,14 +57,46 @@ namespace Microsoft.AspNetCore.Http.Features
             }
         }
 
-        public TFeature Get<TFeature>()
+        public TFeature Get<TFeature>() where TFeature : class
         {
-            return (TFeature)this[typeof(TFeature)];
+            TFeature instance;
+            if (_features != null && StronglyTyped<TFeature>.Features.TryGetValue(this, out instance))
+            {
+                return instance;
+            }
+            else if (_defaults != null && StronglyTyped<TFeature>.Features.TryGetValue(_defaults, out instance))
+            {
+                return instance;
+            }
+            return null;
         }
 
-        public void Set<TFeature>(TFeature instance)
+        public void Set<TFeature>(TFeature instance) where TFeature : class
         {
-            this[typeof(TFeature)] = instance;
+            var cwt = StronglyTyped<TFeature>.Features;
+            var removed = false;
+            // remove+add https://github.com/dotnet/coreclr/issues/4545
+            removed = (_features?.Remove(typeof(TFeature)) ?? false) && cwt.Remove(this);
+            if (instance == null)
+            {
+                if (removed)
+                {
+                    _containerRevision++;
+                }
+                return;
+            }
+            cwt.Add(this, instance);
+            if (_features == null)
+            {
+                _features = new Dictionary<Type, object>();
+            }
+            _features[typeof(TFeature)] = instance;
+            _containerRevision++;
+        }
+
+        private static class StronglyTyped<TFeature> where TFeature : class
+        {
+            public static ConditionalWeakTable<IFeatureCollection, TFeature> Features { get; } = new ConditionalWeakTable<IFeatureCollection, TFeature>();
         }
 
         private class KeyComparer : IEqualityComparer<KeyValuePair<Type, object>>

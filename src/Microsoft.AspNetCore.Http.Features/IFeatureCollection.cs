@@ -22,24 +22,17 @@ namespace Microsoft.AspNetCore.Http.Features
         int Revision { get; }
 
         /// <summary>
-        /// Gets or sets a given feature. Setting a null value removes the feature.
-        /// </summary>
-        /// <param name="key"></param>
-        /// <returns>The requested feature, or null if it is not present.</returns>
-        object this[Type key] { get; set; }
-
-        /// <summary>
         /// Retrieves the requested feature from the collection.
         /// </summary>
         /// <typeparam name="TFeature">The feature key.</typeparam>
         /// <returns>The requested feature, or null if it is not present.</returns>
-        TFeature Get<TFeature>();
+        TFeature Get<TFeature>() where TFeature : class;
 
         /// <summary>
         /// Sets the given feature in the collection.
         /// </summary>
         /// <typeparam name="TFeature">The feature key.</typeparam>
         /// <param name="instance">The feature value.</param>
-        void Set<TFeature>(TFeature instance);
+        void Set<TFeature>(TFeature instance) where TFeature : class;
     }
 }

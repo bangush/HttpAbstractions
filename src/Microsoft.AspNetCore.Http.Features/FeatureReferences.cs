@@ -26,7 +26,7 @@ namespace Microsoft.AspNetCore.Http.Features
         public TFeature Fetch<TFeature, TState>(
             ref TFeature cached,
             TState state,
-            Func<TState, TFeature> factory)
+            Func<TState, TFeature> factory) where TFeature : class
         {
             var cleared = false;
             if (Revision != Collection.Revision)
@@ -53,7 +53,8 @@ namespace Microsoft.AspNetCore.Http.Features
             return feature;
         }
 
-        public TFeature Fetch<TFeature>(ref TFeature cached, Func<IFeatureCollection, TFeature> factory) =>
+        public TFeature Fetch<TFeature>(ref TFeature cached, Func<IFeatureCollection, TFeature> factory)
+            where TFeature : class =>
             Fetch(ref cached, Collection, factory);
     }
 }

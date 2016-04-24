@@ -358,12 +358,12 @@ namespace Microsoft.AspNetCore.Owin
             throw new NotSupportedException();
         }
 
-        public TFeature Get<TFeature>()
+        public TFeature Get<TFeature>() where TFeature : class
         {
             return (TFeature)this[typeof(TFeature)];
         }
 
-        public void Set<TFeature>(TFeature instance)
+        public void Set<TFeature>(TFeature instance) where TFeature : class
         {
             this[typeof(TFeature)] = instance;
         }
