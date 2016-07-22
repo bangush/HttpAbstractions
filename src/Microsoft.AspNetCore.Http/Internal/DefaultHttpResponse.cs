@@ -11,11 +11,22 @@ namespace Microsoft.AspNetCore.Http.Internal
 {
     public class DefaultHttpResponse : HttpResponse
     {
+        private static readonly Func<IFeatureCollection, ResponseCookiesFeature> _defaultResponseCookiesFeatureFactory
+                                                                    = features => new ResponseCookiesFeature(features);
+
+        private readonly Func<IFeatureCollection, ResponseCookiesFeature> _responseCookiesFeatureFactory;
+
         private HttpContext _context;
         private FeatureReferences<FeatureInterfaces> _features;
 
         public DefaultHttpResponse(HttpContext context)
+            : this(context, null)
         {
+        }
+
+        public DefaultHttpResponse(HttpContext context, Func<IFeatureCollection, ResponseCookiesFeature> responseCookiesFeatureFactory)
+        {
+            _responseCookiesFeatureFactory = responseCookiesFeatureFactory ?? _defaultResponseCookiesFeatureFactory;
             Initialize(context);
         }
 
@@ -35,7 +46,7 @@ namespace Microsoft.AspNetCore.Http.Internal
             _features.Fetch(ref _features.Cache.Response, f => null);
 
         private IResponseCookiesFeature ResponseCookiesFeature =>
-            _features.Fetch(ref _features.Cache.Cookies, f => new ResponseCookiesFeature(f));
+            _features.Fetch(ref _features.Cache.Cookies, f => _responseCookiesFeatureFactory(f));
 
 
         public override HttpContext HttpContext { get { return _context; } }

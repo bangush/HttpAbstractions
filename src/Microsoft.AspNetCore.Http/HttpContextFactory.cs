@@ -2,7 +2,6 @@
 // Licensed under the Apache License, Version 2.0. See License.txt in the project root for license information.
 
 using System;
-using System.Text;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.Extensions.ObjectPool;
 using Microsoft.Extensions.Options;
@@ -11,9 +10,9 @@ namespace Microsoft.AspNetCore.Http
 {
     public class HttpContextFactory : IHttpContextFactory
     {
-        private readonly ObjectPool<StringBuilder> _builderPool;
         private readonly IHttpContextAccessor _httpContextAccessor;
-        private readonly FormOptions _formOptions;
+        private readonly Func<IFeatureCollection, ResponseCookiesFeature> _responseCookiesFeatureFactory;
+        private readonly Func<HttpRequest, FormFeature> _formFeatureFactory;
 
         public HttpContextFactory(ObjectPoolProvider poolProvider, IOptions<FormOptions> formOptions)
             : this(poolProvider, formOptions, httpContextAccessor: null)
@@ -31,8 +30,13 @@ namespace Microsoft.AspNetCore.Http
                 throw new ArgumentNullException(nameof(formOptions));
             }
 
-            _builderPool = poolProvider.CreateStringBuilderPool();
-            _formOptions = formOptions.Value;
+
+            var options = formOptions.Value;
+            var builderPool = poolProvider.CreateStringBuilderPool();
+
+            _responseCookiesFeatureFactory = features => new ResponseCookiesFeature(features, builderPool);
+            _formFeatureFactory = request => new FormFeature(request, options);
+
             _httpContextAccessor = httpContextAccessor;
         }
 
@@ -43,17 +47,11 @@ namespace Microsoft.AspNetCore.Http
                 throw new ArgumentNullException(nameof(featureCollection));
             }
 
-            var responseCookiesFeature = new ResponseCookiesFeature(featureCollection, _builderPool);
-            featureCollection.Set<IResponseCookiesFeature>(responseCookiesFeature);
-
-            var httpContext = new DefaultHttpContext(featureCollection);
+            var httpContext = new DefaultHttpContext(featureCollection, _responseCookiesFeatureFactory, _formFeatureFactory);
             if (_httpContextAccessor != null)
             {
                 _httpContextAccessor.HttpContext = httpContext;
             }
-
-            var formFeature = new FormFeature(httpContext.Request, _formOptions);
-            featureCollection.Set<IFormFeature>(formFeature);
 
             return httpContext;
         }

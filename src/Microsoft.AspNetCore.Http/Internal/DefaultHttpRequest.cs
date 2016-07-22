@@ -12,11 +12,22 @@ namespace Microsoft.AspNetCore.Http.Internal
 {
     public class DefaultHttpRequest : HttpRequest
     {
+        private static readonly Func<HttpRequest, FormFeature> _defaultFormFeatureFactory
+                                                    = request => new FormFeature(request);
+
+        private readonly Func<HttpRequest, FormFeature> _formFeatureFactory;
+
         private HttpContext _context;
         private FeatureReferences<FeatureInterfaces> _features;
 
         public DefaultHttpRequest(HttpContext context)
+            : this(context, _defaultFormFeatureFactory)
         {
+        }
+
+        public DefaultHttpRequest(HttpContext context, Func<HttpRequest, FormFeature> formFeatureFactory)
+        {
+            _formFeatureFactory = formFeatureFactory ?? _defaultFormFeatureFactory;
             Initialize(context);
         }
 
@@ -41,7 +52,7 @@ namespace Microsoft.AspNetCore.Http.Internal
             _features.Fetch(ref _features.Cache.Query, f => new QueryFeature(f));
 
         private IFormFeature FormFeature =>
-            _features.Fetch(ref _features.Cache.Form, this, f => new FormFeature(f));
+            _features.Fetch(ref _features.Cache.Form, this, request => _formFeatureFactory(request));
 
         private IRequestCookiesFeature RequestCookiesFeature =>
             _features.Fetch(ref _features.Cache.Cookies, f => new RequestCookiesFeature(f));

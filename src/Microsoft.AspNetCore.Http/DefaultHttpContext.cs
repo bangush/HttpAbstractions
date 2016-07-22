@@ -15,6 +15,9 @@ namespace Microsoft.AspNetCore.Http
 {
     public class DefaultHttpContext : HttpContext
     {
+        private readonly Func<HttpRequest, FormFeature> _formFeatureFactory;
+        private readonly Func<IFeatureCollection, ResponseCookiesFeature> _responseCookiesFeatureFactory;
+
         private FeatureReferences<FeatureInterfaces> _features;
 
         private HttpRequest _request;
@@ -31,7 +34,14 @@ namespace Microsoft.AspNetCore.Http
         }
 
         public DefaultHttpContext(IFeatureCollection features)
+            : this(features, null, null)
         {
+        }
+
+        public DefaultHttpContext(IFeatureCollection features, Func<IFeatureCollection, ResponseCookiesFeature> responseCookiesFeatureFactory, Func<HttpRequest, FormFeature> formFeatureFactory)
+        {
+            _formFeatureFactory = formFeatureFactory;
+            _responseCookiesFeatureFactory = responseCookiesFeatureFactory;
             Initialize(features);
         }
 
@@ -172,10 +182,10 @@ namespace Microsoft.AspNetCore.Http
         }
 
 
-        protected virtual HttpRequest InitializeHttpRequest() => new DefaultHttpRequest(this);
+        protected virtual HttpRequest InitializeHttpRequest() => new DefaultHttpRequest(this, _formFeatureFactory);
         protected virtual void UninitializeHttpRequest(HttpRequest instance) { }
 
-        protected virtual HttpResponse InitializeHttpResponse() => new DefaultHttpResponse(this);
+        protected virtual HttpResponse InitializeHttpResponse() => new DefaultHttpResponse(this, _responseCookiesFeatureFactory);
         protected virtual void UninitializeHttpResponse(HttpResponse instance) { }
 
         protected virtual ConnectionInfo InitializeConnectionInfo() => new DefaultConnectionInfo(Features);

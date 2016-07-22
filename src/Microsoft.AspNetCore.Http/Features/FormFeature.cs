@@ -41,13 +41,9 @@ namespace Microsoft.AspNetCore.Http.Features
             {
                 throw new ArgumentNullException(nameof(request));
             }
-            if (options == null)
-            {
-                throw new ArgumentNullException(nameof(options));
-            }
 
             _request = request;
-            _options = options;
+            _options = options ?? DefaultFormOptions;
         }
 
         private MediaTypeHeaderValue ContentType
