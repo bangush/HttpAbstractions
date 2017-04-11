@@ -9,30 +9,26 @@ using Microsoft.Net.Http.Headers;
 
 namespace Microsoft.AspNetCore.Http.Internal
 {
-    public class DefaultHttpResponse : HttpResponse
+    public sealed class DefaultHttpResponse : HttpResponse
     {
         // Lambdas hoisted to static readonly fields to improve inlining https://github.com/dotnet/roslyn/issues/13624
         private readonly static Func<IFeatureCollection, IHttpResponseFeature> _nullResponseFeature = f => null;
         private readonly static Func<IFeatureCollection, IResponseCookiesFeature> _newResponseCookiesFeature = f => new ResponseCookiesFeature(f);
 
-        private HttpContext _context;
+        private readonly DefaultHttpContext _context;
         private FeatureReferences<FeatureInterfaces> _features;
 
-        public DefaultHttpResponse(HttpContext context)
-        {
-            Initialize(context);
-        }
-
-        public virtual void Initialize(HttpContext context)
+        public DefaultHttpResponse(DefaultHttpContext context, int featuresVersion)
         {
             _context = context;
-            _features = new FeatureReferences<FeatureInterfaces>(context.Features);
+            Initialize(context.Features, featuresVersion);
         }
 
-        public virtual void Uninitialize()
+        public void Initialize(IFeatureCollection features, int featuresVersion)
         {
-            _context = null;
-            _features = default(FeatureReferences<FeatureInterfaces>);
+            // Speculatively populate always used features for current version
+            _features = new FeatureReferences<FeatureInterfaces>(features, featuresVersion);
+            _features.Cache.Response = (IHttpResponseFeature)features[typeof(IHttpResponseFeature)];
         }
 
         private IHttpResponseFeature HttpResponseFeature =>
@@ -42,7 +38,7 @@ namespace Microsoft.AspNetCore.Http.Internal
             _features.Fetch(ref _features.Cache.Cookies, _newResponseCookiesFeature);
 
 
-        public override HttpContext HttpContext { get { return _context; } }
+        public override HttpContext HttpContext => _context;
 
         public override int StatusCode
         {
@@ -128,6 +124,11 @@ namespace Microsoft.AspNetCore.Http.Internal
             }
 
             Headers[HeaderNames.Location] = location;
+        }
+
+        public void Uninitialize()
+        {
+            _features = default(FeatureReferences<FeatureInterfaces>);
         }
 
         struct FeatureInterfaces

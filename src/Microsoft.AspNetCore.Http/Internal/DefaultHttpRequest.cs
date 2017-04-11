@@ -10,7 +10,7 @@ using Microsoft.Net.Http.Headers;
 
 namespace Microsoft.AspNetCore.Http.Internal
 {
-    public class DefaultHttpRequest : HttpRequest
+    public sealed class DefaultHttpRequest : HttpRequest
     {
         // Lambdas hoisted to static readonly fields to improve inlining https://github.com/dotnet/roslyn/issues/13624
         private readonly static Func<IFeatureCollection, IHttpRequestFeature> _nullRequestFeature = f => null;
@@ -18,24 +18,20 @@ namespace Microsoft.AspNetCore.Http.Internal
         private readonly static Func<HttpRequest, IFormFeature> _newFormFeature = r => new FormFeature(r);
         private readonly static Func<IFeatureCollection, IRequestCookiesFeature> _newRequestCookiesFeature = f => new RequestCookiesFeature(f);
 
-        private HttpContext _context;
+        private readonly DefaultHttpContext _context;
         private FeatureReferences<FeatureInterfaces> _features;
 
-        public DefaultHttpRequest(HttpContext context)
-        {
-            Initialize(context);
-        }
-
-        public virtual void Initialize(HttpContext context)
+        public DefaultHttpRequest(DefaultHttpContext context, int featuresVersion)
         {
             _context = context;
-            _features = new FeatureReferences<FeatureInterfaces>(context.Features);
+            Initialize(context.Features, featuresVersion);
         }
 
-        public virtual void Uninitialize()
+        public void Initialize(IFeatureCollection features, int featuresVersion)
         {
-            _context = null;
-            _features = default(FeatureReferences<FeatureInterfaces>);
+            // Speculatively populate always used features for current version
+            _features = new FeatureReferences<FeatureInterfaces>(features, featuresVersion);
+            _features.Cache.Request = (IHttpRequestFeature)features[typeof(IHttpRequestFeature)];
         }
 
         public override HttpContext HttpContext => _context;
@@ -149,6 +145,11 @@ namespace Microsoft.AspNetCore.Http.Internal
         public override Task<IFormCollection> ReadFormAsync(CancellationToken cancellationToken)
         {
             return FormFeature.ReadFormAsync(cancellationToken);
+        }
+
+        public void Uninitialize()
+        {
+            _features = default(FeatureReferences<FeatureInterfaces>);
         }
 
         struct FeatureInterfaces

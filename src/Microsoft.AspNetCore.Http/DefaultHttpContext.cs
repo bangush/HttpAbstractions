@@ -3,6 +3,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Runtime.CompilerServices;
 using System.Security.Claims;
 using System.Threading;
 using Microsoft.AspNetCore.Http.Authentication;
@@ -13,7 +14,7 @@ using Microsoft.AspNetCore.Http.Internal;
 
 namespace Microsoft.AspNetCore.Http
 {
-    public class DefaultHttpContext : HttpContext
+    public sealed class DefaultHttpContext : HttpContext
     {
         // Lambdas hoisted to static readonly fields to improve inlining https://github.com/dotnet/roslyn/issues/13624
         private readonly static Func<IFeatureCollection, IItemsFeature> _newItemsFeature = f => new ItemsFeature();
@@ -26,8 +27,8 @@ namespace Microsoft.AspNetCore.Http
 
         private FeatureReferences<FeatureInterfaces> _features;
 
-        private HttpRequest _request;
-        private HttpResponse _response;
+        private DefaultHttpRequest _request;
+        private DefaultHttpResponse _response;
         private AuthenticationManager _authenticationManager;
         private ConnectionInfo _connection;
         private WebSocketManager _websockets;
@@ -41,44 +42,22 @@ namespace Microsoft.AspNetCore.Http
 
         public DefaultHttpContext(IFeatureCollection features)
         {
-            Initialize(features);
+            var featuresVersion = features.Revision;
+
+            // Speculatively populate always used features for current version
+            _features = new FeatureReferences<FeatureInterfaces>(features, featuresVersion);
+            _request = new DefaultHttpRequest(this, featuresVersion);
+            _response = new DefaultHttpResponse(this, featuresVersion);
         }
 
-        public virtual void Initialize(IFeatureCollection features)
+        public void Initialize(IFeatureCollection features)
         {
-            _features = new FeatureReferences<FeatureInterfaces>(features);
-            _request = InitializeHttpRequest();
-            _response = InitializeHttpResponse();
-        }
+            var featuresVersion = features.Revision;
 
-        public virtual void Uninitialize()
-        {
-            _features = default(FeatureReferences<FeatureInterfaces>);
-            if (_request != null)
-            {
-                UninitializeHttpRequest(_request);
-                _request = null;
-            }
-            if (_response != null)
-            {
-                UninitializeHttpResponse(_response);
-                _response = null;
-            }
-            if (_authenticationManager != null)
-            {
-                UninitializeAuthenticationManager(_authenticationManager);
-                _authenticationManager = null;
-            }
-            if (_connection != null)
-            {
-                UninitializeConnectionInfo(_connection);
-                _connection = null;
-            }
-            if (_websockets != null)
-            {
-                UninitializeWebSocketManager(_websockets);
-                _websockets = null;
-            }
+            // Speculatively populate always used features for current version
+            _features = new FeatureReferences<FeatureInterfaces>(features, featuresVersion);
+            _request.Initialize(features, featuresVersion);
+            _response.Initialize(features, featuresVersion);
         }
 
         private IItemsFeature ItemsFeature =>
@@ -109,11 +88,11 @@ namespace Microsoft.AspNetCore.Http
 
         public override HttpResponse Response => _response;
 
-        public override ConnectionInfo Connection => _connection ?? (_connection = InitializeConnectionInfo());
+        public override ConnectionInfo Connection => _connection ?? InitializeConnectionInfo();
 
-        public override AuthenticationManager Authentication => _authenticationManager ?? (_authenticationManager = InitializeAuthenticationManager());
+        public override AuthenticationManager Authentication => _authenticationManager ?? InitializeAuthenticationManager();
 
-        public override WebSocketManager WebSockets => _websockets ?? (_websockets = InitializeWebSocketManager());
+        public override WebSocketManager WebSockets => _websockets ?? InitializeWebSocketManager();
 
 
         public override ClaimsPrincipal User
@@ -180,21 +159,24 @@ namespace Microsoft.AspNetCore.Http
             LifetimeFeature.Abort();
         }
 
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        private ConnectionInfo InitializeConnectionInfo() => (_connection = new DefaultConnectionInfo(Features));
 
-        protected virtual HttpRequest InitializeHttpRequest() => new DefaultHttpRequest(this);
-        protected virtual void UninitializeHttpRequest(HttpRequest instance) { }
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        private AuthenticationManager InitializeAuthenticationManager() => (_authenticationManager = new DefaultAuthenticationManager(this));
 
-        protected virtual HttpResponse InitializeHttpResponse() => new DefaultHttpResponse(this);
-        protected virtual void UninitializeHttpResponse(HttpResponse instance) { }
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        private WebSocketManager InitializeWebSocketManager() => (_websockets = new DefaultWebSocketManager(Features));
 
-        protected virtual ConnectionInfo InitializeConnectionInfo() => new DefaultConnectionInfo(Features);
-        protected virtual void UninitializeConnectionInfo(ConnectionInfo instance) { }
-
-        protected virtual AuthenticationManager InitializeAuthenticationManager() => new DefaultAuthenticationManager(this);
-        protected virtual void UninitializeAuthenticationManager(AuthenticationManager instance) { }
-
-        protected virtual WebSocketManager InitializeWebSocketManager() => new DefaultWebSocketManager(Features);
-        protected virtual void UninitializeWebSocketManager(WebSocketManager instance) { }
+        public void Uninitialize()
+        {
+            _features = default(FeatureReferences<FeatureInterfaces>);
+            _request.Uninitialize();
+            _response.Uninitialize();
+            _authenticationManager = null;
+            _connection = null;
+            _websockets = null;
+        }
 
         struct FeatureInterfaces
         {
