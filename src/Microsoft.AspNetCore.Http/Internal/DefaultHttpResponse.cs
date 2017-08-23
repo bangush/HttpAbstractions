@@ -9,7 +9,7 @@ using Microsoft.Net.Http.Headers;
 
 namespace Microsoft.AspNetCore.Http.Internal
 {
-    public class DefaultHttpResponse : HttpResponse
+    public sealed class DefaultHttpResponse : HttpResponse
     {
         // Lambdas hoisted to static readonly fields to improve inlining https://github.com/dotnet/roslyn/issues/13624
         private readonly static Func<IFeatureCollection, IHttpResponseFeature> _nullResponseFeature = f => null;
@@ -19,19 +19,23 @@ namespace Microsoft.AspNetCore.Http.Internal
         private FeatureReferences<FeatureInterfaces> _features;
 
         public DefaultHttpResponse(HttpContext context)
+            : this(context, context.Features.Revision, context.Features)
         {
-            Initialize(context);
         }
 
-        public virtual void Initialize(HttpContext context)
+        public DefaultHttpResponse(HttpContext context, int revision, IFeatureCollection features)
         {
             _context = context;
-            _features = new FeatureReferences<FeatureInterfaces>(context.Features);
+            Initialize(features, revision);
         }
 
-        public virtual void Uninitialize()
+        internal void Initialize(IFeatureCollection features, int revision)
         {
-            _context = null;
+            _features = new FeatureReferences<FeatureInterfaces>(features, revision);
+        }
+
+        internal void Uninitialize()
+        {
             _features = default(FeatureReferences<FeatureInterfaces>);
         }
 
@@ -40,7 +44,6 @@ namespace Microsoft.AspNetCore.Http.Internal
 
         private IResponseCookiesFeature ResponseCookiesFeature =>
             _features.Fetch(ref _features.Cache.Cookies, _newResponseCookiesFeature);
-
 
         public override HttpContext HttpContext { get { return _context; } }
 

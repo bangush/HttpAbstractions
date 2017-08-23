@@ -10,7 +10,7 @@ namespace Microsoft.AspNetCore.Http
     public class HttpContextFactory : IHttpContextFactory
     {
         private readonly IHttpContextAccessor _httpContextAccessor;
-        private readonly FormOptions _formOptions;
+        private readonly Func<HttpRequest, FormFeature> _formFeatureFactory;
 
         public HttpContextFactory(IOptions<FormOptions> formOptions)
             : this(formOptions, httpContextAccessor: null)
@@ -24,7 +24,7 @@ namespace Microsoft.AspNetCore.Http
                 throw new ArgumentNullException(nameof(formOptions));
             }
 
-            _formOptions = formOptions.Value;
+            _formFeatureFactory = request => new FormFeature(request, formOptions.Value);
             _httpContextAccessor = httpContextAccessor;
         }
 
@@ -35,14 +35,11 @@ namespace Microsoft.AspNetCore.Http
                 throw new ArgumentNullException(nameof(featureCollection));
             }
 
-            var httpContext = new DefaultHttpContext(featureCollection);
+            var httpContext = new DefaultHttpContext(featureCollection, _formFeatureFactory);
             if (_httpContextAccessor != null)
             {
                 _httpContextAccessor.HttpContext = httpContext;
             }
-
-            var formFeature = new FormFeature(httpContext.Request, _formOptions);
-            featureCollection.Set<IFormFeature>(formFeature);
 
             return httpContext;
         }

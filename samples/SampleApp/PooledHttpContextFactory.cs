@@ -3,10 +3,9 @@
 
 using System;
 using System.Collections.Generic;
-using System.Text;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.Features;
-using Microsoft.Extensions.ObjectPool;
+using Microsoft.Extensions.Options;
 
 namespace SampleApp
 {
@@ -14,19 +13,21 @@ namespace SampleApp
     {
         private readonly IHttpContextAccessor _httpContextAccessor;
         private readonly Stack<PooledHttpContext> _pool = new Stack<PooledHttpContext>();
+        private readonly Func<HttpRequest, FormFeature> _formFeatureFactory;
 
-        public PooledHttpContextFactory(ObjectPoolProvider poolProvider)
-            : this(poolProvider, httpContextAccessor: null)
+        public PooledHttpContextFactory(IOptions<FormOptions> formOptions)
+            : this(formOptions, httpContextAccessor: null)
         {
         }
 
-        public PooledHttpContextFactory(ObjectPoolProvider poolProvider, IHttpContextAccessor httpContextAccessor)
+        public PooledHttpContextFactory(IOptions<FormOptions> formOptions, IHttpContextAccessor httpContextAccessor)
         {
-            if (poolProvider == null)
+            if (formOptions == null)
             {
-                throw new ArgumentNullException(nameof(poolProvider));
+                throw new ArgumentNullException(nameof(formOptions));
             }
 
+            _formFeatureFactory = request => new FormFeature(request, formOptions.Value);
             _httpContextAccessor = httpContextAccessor;
         }
 
@@ -48,11 +49,11 @@ namespace SampleApp
 
             if (httpContext == null)
             {
-                httpContext = new PooledHttpContext(featureCollection);
+                httpContext = new PooledHttpContext(featureCollection, _formFeatureFactory);
             }
             else
             {
-                httpContext.Initialize(featureCollection);
+                httpContext.Initialize(featureCollection, _formFeatureFactory);
             }
 
             if (_httpContextAccessor != null)

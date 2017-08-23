@@ -10,6 +10,7 @@ using Microsoft.AspNetCore.Http.Authentication.Internal;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.Http.Features.Authentication;
 using Microsoft.AspNetCore.Http.Internal;
+using System.Runtime.CompilerServices;
 
 namespace Microsoft.AspNetCore.Http
 {
@@ -24,10 +25,12 @@ namespace Microsoft.AspNetCore.Http
         private readonly static Func<IFeatureCollection, ISessionFeature> _nullSessionFeature = f => null;
         private readonly static Func<IFeatureCollection, IHttpRequestIdentifierFeature> _newHttpRequestIdentifierFeature = f => new HttpRequestIdentifierFeature();
 
+        private Func<HttpRequest, FormFeature> _formFeatureFactory;
+
         private FeatureReferences<FeatureInterfaces> _features;
 
-        private HttpRequest _request;
-        private HttpResponse _response;
+        private DefaultHttpRequest _request = null;
+        private DefaultHttpResponse _response = null;
 
 #pragma warning disable CS0618 // Type or member is obsolete
         private AuthenticationManager _authenticationManager;
@@ -35,6 +38,7 @@ namespace Microsoft.AspNetCore.Http
 
         private ConnectionInfo _connection;
         private WebSocketManager _websockets;
+        private bool _initialized;
 
         public DefaultHttpContext()
             : this(new FeatureCollection())
@@ -44,47 +48,43 @@ namespace Microsoft.AspNetCore.Http
         }
 
         public DefaultHttpContext(IFeatureCollection features)
+            : this(features, null)
         {
-            Initialize(features);
         }
 
-        public virtual void Initialize(IFeatureCollection features)
+        public DefaultHttpContext(IFeatureCollection features, Func<HttpRequest, FormFeature> formFeatureFactory)
         {
-            _features = new FeatureReferences<FeatureInterfaces>(features);
-            _request = InitializeHttpRequest();
-            _response = InitializeHttpResponse();
+            Initialize(features, formFeatureFactory);
         }
 
-        public virtual void Uninitialize()
+        public void Initialize(IFeatureCollection features, Func<HttpRequest, FormFeature> formFeatureFactory)
+        {
+            const int LazyInitialize = -1;
+
+            _formFeatureFactory = formFeatureFactory;
+            _features = new FeatureReferences<FeatureInterfaces>(features, LazyInitialize);
+        }
+
+        public void Uninitialize()
         {
             _features = default(FeatureReferences<FeatureInterfaces>);
-            if (_request != null)
-            {
-                UninitializeHttpRequest(_request);
-                _request = null;
-            }
-            if (_response != null)
-            {
-                UninitializeHttpResponse(_response);
-                _response = null;
-            }
+            _request?.Uninitialize();
+            _response?.Uninitialize();
+
             if (_authenticationManager != null)
             {
-#pragma warning disable CS0618 // Type or member is obsolete
-                UninitializeAuthenticationManager(_authenticationManager);
-#pragma warning restore CS0618 // Type or member is obsolete
                 _authenticationManager = null;
             }
             if (_connection != null)
             {
-                UninitializeConnectionInfo(_connection);
                 _connection = null;
             }
             if (_websockets != null)
             {
-                UninitializeWebSocketManager(_websockets);
                 _websockets = null;
             }
+
+            _initialized = false;
         }
 
         private IItemsFeature ItemsFeature =>
@@ -111,9 +111,9 @@ namespace Microsoft.AspNetCore.Http
 
         public override IFeatureCollection Features => _features.Collection;
 
-        public override HttpRequest Request => _request;
+        public override HttpRequest Request => _initialized ? _request : InitializeHttpRequest();
 
-        public override HttpResponse Response => _response;
+        public override HttpResponse Response => _initialized ? _response : InitializeHttpResponse();
 
         public override ConnectionInfo Connection => _connection ?? (_connection = InitializeConnectionInfo());
 
@@ -185,30 +185,59 @@ namespace Microsoft.AspNetCore.Http
             }
         }
 
+        private void InitializeRequestResponse()
+        {
+            var revision = _features.GetRevisionAndValidateCache();
+            var collection = _features.Collection;
 
+            if (_request == null)
+            {
+                _request = new DefaultHttpRequest(this, revision, collection, _formFeatureFactory);
+            }
+            else
+            {
+                _request.Initialize(collection, revision, _formFeatureFactory);
+            }
+            if (_response == null)
+            {
+                _response = new DefaultHttpResponse(this, revision, collection);
+            }
+            else
+            {
+                _response.Initialize(collection, revision);
+            }
+
+            _initialized = true;
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        private DefaultHttpRequest InitializeHttpRequest()
+        {
+            InitializeRequestResponse();
+            return _request;
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        private DefaultHttpResponse InitializeHttpResponse()
+        {
+            InitializeRequestResponse();
+            return _response;
+        }
 
         public override void Abort()
         {
             LifetimeFeature.Abort();
         }
 
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        private ConnectionInfo InitializeConnectionInfo() => new DefaultConnectionInfo(Features);
 
-        protected virtual HttpRequest InitializeHttpRequest() => new DefaultHttpRequest(this);
-        protected virtual void UninitializeHttpRequest(HttpRequest instance) { }
-
-        protected virtual HttpResponse InitializeHttpResponse() => new DefaultHttpResponse(this);
-        protected virtual void UninitializeHttpResponse(HttpResponse instance) { }
-
-        protected virtual ConnectionInfo InitializeConnectionInfo() => new DefaultConnectionInfo(Features);
-        protected virtual void UninitializeConnectionInfo(ConnectionInfo instance) { }
-
+        [MethodImpl(MethodImplOptions.NoInlining)]
         [Obsolete("This is obsolete and will be removed in a future version. See https://go.microsoft.com/fwlink/?linkid=845470.")]
-        protected virtual AuthenticationManager InitializeAuthenticationManager() => new DefaultAuthenticationManager(this);
-        [Obsolete("This is obsolete and will be removed in a future version. See https://go.microsoft.com/fwlink/?linkid=845470.")]
-        protected virtual void UninitializeAuthenticationManager(AuthenticationManager instance) { }
+        private AuthenticationManager InitializeAuthenticationManager() => new DefaultAuthenticationManager(this);
 
-        protected virtual WebSocketManager InitializeWebSocketManager() => new DefaultWebSocketManager(Features);
-        protected virtual void UninitializeWebSocketManager(WebSocketManager instance) { }
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        private WebSocketManager InitializeWebSocketManager() => new DefaultWebSocketManager(Features);
 
         struct FeatureInterfaces
         {

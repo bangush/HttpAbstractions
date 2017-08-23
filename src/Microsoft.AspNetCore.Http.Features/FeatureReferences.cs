@@ -10,9 +10,16 @@ namespace Microsoft.AspNetCore.Http.Features
     {
         public FeatureReferences(IFeatureCollection collection)
         {
+            Revision = collection.Revision;
             Collection = collection;
             Cache = default(TCache);
-            Revision = collection.Revision;
+        }
+
+        public FeatureReferences(IFeatureCollection collection, int revision)
+        {
+            Revision = revision;
+            Collection = collection;
+            Cache = default(TCache);
         }
 
         public IFeatureCollection Collection { get; private set; }
@@ -61,6 +68,19 @@ namespace Microsoft.AspNetCore.Http.Features
             }
 
             return cached ?? UpdateCached(ref cached, state, factory, revision, flush);
+        }
+
+        public int GetRevisionAndValidateCache()
+        {
+            var revision = Collection.Revision;
+            if (Revision != revision)
+            {
+                Revision = revision;
+                // Collection detected as changed, clear cache
+                Cache = default(TCache);
+            }
+
+            return revision;
         }
 
         // Update and cache clearing logic, when the fast-path in Fetch isn't applicable

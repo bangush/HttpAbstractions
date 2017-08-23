@@ -152,13 +152,17 @@ namespace Microsoft.AspNetCore.Http
         [Fact]
         public void UpdateFeatures_ClearsCachedFeatures()
         {
+            Func<HttpRequest, FormFeature> formFeatureFactory = request => new FormFeature(request);
+
             var features = new FeatureCollection();
             features.Set<IHttpRequestFeature>(new HttpRequestFeature());
             features.Set<IHttpResponseFeature>(new HttpResponseFeature());
             features.Set<IHttpWebSocketFeature>(new TestHttpWebSocketFeature());
 
             // featurecollection is set. all cached interfaces are null.
-            var context = new DefaultHttpContext(features);
+            var context = new DefaultHttpContext(features, formFeatureFactory);
+            // Trigger initalization
+            Assert.NotNull(context.Request);
             TestAllCachedFeaturesAreNull(context, features);
             Assert.Equal(3, features.Count());
 
@@ -178,7 +182,9 @@ namespace Microsoft.AspNetCore.Http
             newFeatures.Set<IHttpWebSocketFeature>(new TestHttpWebSocketFeature());
 
             // featurecollection is set to newFeatures. all cached interfaces are null.
-            context.Initialize(newFeatures);
+            context.Initialize(newFeatures, formFeatureFactory);
+            // Trigger initalization
+            Assert.NotNull(context.Request);
             TestAllCachedFeaturesAreNull(context, newFeatures);
             Assert.Equal(3, newFeatures.Count());
 

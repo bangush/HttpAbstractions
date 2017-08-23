@@ -8,5 +8,65 @@
       "TypeId": "public class Microsoft.AspNetCore.Http.HttpContextFactory : Microsoft.AspNetCore.Http.IHttpContextFactory",
       "MemberId": "public .ctor(Microsoft.Extensions.ObjectPool.ObjectPoolProvider poolProvider, Microsoft.Extensions.Options.IOptions<Microsoft.AspNetCore.Http.Features.FormOptions> formOptions, Microsoft.AspNetCore.Http.IHttpContextAccessor httpContextAccessor)",
       "Kind": "Removal"
+    },
+    {
+      "TypeId": "public class Microsoft.AspNetCore.Http.DefaultHttpContext : Microsoft.AspNetCore.Http.HttpContext",
+      "MemberId": "protected virtual Microsoft.AspNetCore.Http.Authentication.AuthenticationManager InitializeAuthenticationManager()",
+      "Kind": "Removal"
+    },
+    {
+      "TypeId": "public class Microsoft.AspNetCore.Http.DefaultHttpContext : Microsoft.AspNetCore.Http.HttpContext",
+      "MemberId": "protected virtual Microsoft.AspNetCore.Http.ConnectionInfo InitializeConnectionInfo()",
+      "Kind": "Removal"
+    },
+    {
+      "TypeId": "public class Microsoft.AspNetCore.Http.DefaultHttpContext : Microsoft.AspNetCore.Http.HttpContext",
+      "MemberId": "protected virtual Microsoft.AspNetCore.Http.HttpRequest InitializeHttpRequest()",
+      "Kind": "Removal"
+    },
+    {
+      "TypeId": "public class Microsoft.AspNetCore.Http.DefaultHttpContext : Microsoft.AspNetCore.Http.HttpContext",
+      "MemberId": "protected virtual Microsoft.AspNetCore.Http.HttpResponse InitializeHttpResponse()",
+      "Kind": "Removal"
+    },
+    {
+      "TypeId": "public class Microsoft.AspNetCore.Http.DefaultHttpContext : Microsoft.AspNetCore.Http.HttpContext",
+      "MemberId": "protected virtual Microsoft.AspNetCore.Http.WebSocketManager InitializeWebSocketManager()",
+      "Kind": "Removal"
+    },
+    {
+      "TypeId": "public class Microsoft.AspNetCore.Http.DefaultHttpContext : Microsoft.AspNetCore.Http.HttpContext",
+      "MemberId": "protected virtual System.Void UninitializeAuthenticationManager(Microsoft.AspNetCore.Http.Authentication.AuthenticationManager instance)",
+      "Kind": "Removal"
+    },
+    {
+      "TypeId": "public class Microsoft.AspNetCore.Http.DefaultHttpContext : Microsoft.AspNetCore.Http.HttpContext",
+      "MemberId": "protected virtual System.Void UninitializeConnectionInfo(Microsoft.AspNetCore.Http.ConnectionInfo instance)",
+      "Kind": "Removal"
+    },
+    {
+      "TypeId": "public class Microsoft.AspNetCore.Http.DefaultHttpContext : Microsoft.AspNetCore.Http.HttpContext",
+      "MemberId": "protected virtual System.Void UninitializeHttpRequest(Microsoft.AspNetCore.Http.HttpRequest instance)",
+      "Kind": "Removal"
+    },
+    {
+      "TypeId": "public class Microsoft.AspNetCore.Http.DefaultHttpContext : Microsoft.AspNetCore.Http.HttpContext",
+      "MemberId": "protected virtual System.Void UninitializeHttpResponse(Microsoft.AspNetCore.Http.HttpResponse instance)",
+      "Kind": "Removal"
+    },
+    {
+      "TypeId": "public class Microsoft.AspNetCore.Http.DefaultHttpContext : Microsoft.AspNetCore.Http.HttpContext",
+      "MemberId": "protected virtual System.Void UninitializeWebSocketManager(Microsoft.AspNetCore.Http.WebSocketManager instance)",
+      "Kind": "Removal"
+    },
+    {
+      "TypeId": "public class Microsoft.AspNetCore.Http.DefaultHttpContext : Microsoft.AspNetCore.Http.HttpContext",
+      "MemberId": "public virtual System.Void Initialize(Microsoft.AspNetCore.Http.Features.IFeatureCollection features)",
+      "Kind": "Removal"
+    },
+    {
+      "TypeId": "public class Microsoft.AspNetCore.Http.DefaultHttpContext : Microsoft.AspNetCore.Http.HttpContext",
+      "MemberId": "public virtual System.Void Uninitialize()",
+      "Kind": "Removal"
     }
   ]
