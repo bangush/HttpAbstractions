@@ -3,6 +3,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Runtime.CompilerServices;
 using System.Security.Claims;
 using System.Threading;
 using Microsoft.AspNetCore.Http.Authentication;
@@ -24,6 +25,7 @@ namespace Microsoft.AspNetCore.Http
         private readonly static Func<IFeatureCollection, ISessionFeature> _nullSessionFeature = f => null;
         private readonly static Func<IFeatureCollection, IHttpRequestIdentifierFeature> _newHttpRequestIdentifierFeature = f => new HttpRequestIdentifierFeature();
 
+        private FormOptions _formOptions;
         private FeatureReferences<FeatureInterfaces> _features;
 
         private HttpRequest _request;
@@ -44,15 +46,26 @@ namespace Microsoft.AspNetCore.Http
         }
 
         public DefaultHttpContext(IFeatureCollection features)
+            : this(features, FormOptions.Default)
         {
-            Initialize(features);
         }
 
-        public virtual void Initialize(IFeatureCollection features)
+        public DefaultHttpContext(IFeatureCollection features, FormOptions formOptions)
+        {
+            Initialize(features, formOptions);
+        }
+
+        public virtual void Initialize(IFeatureCollection features, FormOptions formOptions)
         {
             _features = new FeatureReferences<FeatureInterfaces>(features);
             _request = InitializeHttpRequest();
             _response = InitializeHttpResponse();
+            _formOptions = formOptions;
+        }
+
+        public virtual void Initialize(IFeatureCollection features)
+        {
+            Initialize(features, FormOptions.Default);
         }
 
         public virtual void Uninitialize()
@@ -85,6 +98,7 @@ namespace Microsoft.AspNetCore.Http
                 UninitializeWebSocketManager(_websockets);
                 _websockets = null;
             }
+            _formOptions = null;
         }
 
         private IItemsFeature ItemsFeature =>
@@ -185,18 +199,43 @@ namespace Microsoft.AspNetCore.Http
             }
         }
 
-
-
         public override void Abort()
         {
             LifetimeFeature.Abort();
         }
 
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        private void InitializeRequestResponse()
+        {
+            var revision = _features.Revision;
+            var collection = _features.Collection;
 
-        protected virtual HttpRequest InitializeHttpRequest() => new DefaultHttpRequest(this);
+            _request = new DefaultHttpRequest(this, revision, collection, _formOptions);
+            _response = new DefaultHttpResponse(this, revision, collection);
+        }
+
+        protected virtual HttpRequest InitializeHttpRequest()
+        {
+            if (_request == null)
+            {
+                InitializeRequestResponse();
+            }
+
+            return _request;
+        }
+
         protected virtual void UninitializeHttpRequest(HttpRequest instance) { }
 
-        protected virtual HttpResponse InitializeHttpResponse() => new DefaultHttpResponse(this);
+        protected virtual HttpResponse InitializeHttpResponse()
+        {
+            if (_response == null)
+            {
+                InitializeRequestResponse();
+            }
+
+            return _response;
+        }
+
         protected virtual void UninitializeHttpResponse(HttpResponse instance) { }
 
         protected virtual ConnectionInfo InitializeConnectionInfo() => new DefaultConnectionInfo(Features);

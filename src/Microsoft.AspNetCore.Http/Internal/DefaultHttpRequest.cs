@@ -15,26 +15,39 @@ namespace Microsoft.AspNetCore.Http.Internal
         // Lambdas hoisted to static readonly fields to improve inlining https://github.com/dotnet/roslyn/issues/13624
         private readonly static Func<IFeatureCollection, IHttpRequestFeature> _nullRequestFeature = f => null;
         private readonly static Func<IFeatureCollection, IQueryFeature> _newQueryFeature = f => new QueryFeature(f);
-        private readonly static Func<HttpRequest, IFormFeature> _newFormFeature = r => new FormFeature(r);
+        private readonly static Func<(HttpRequest request, FormOptions options), IFormFeature> _newFormFeature = (r) => new FormFeature(r.request, r.options ?? FormOptions.Default);
         private readonly static Func<IFeatureCollection, IRequestCookiesFeature> _newRequestCookiesFeature = f => new RequestCookiesFeature(f);
 
+        private FormOptions _formOptions;
         private HttpContext _context;
         private FeatureReferences<FeatureInterfaces> _features;
 
         public DefaultHttpRequest(HttpContext context)
+            : this (context, context.Features.Revision, context.Features, FormOptions.Default)
         {
-            Initialize(context);
+        }
+
+        internal DefaultHttpRequest(HttpContext context, int revision, IFeatureCollection features, FormOptions formOptions)
+        {
+            _context = context;
+            Initialize(features, revision, formOptions);
         }
 
         public virtual void Initialize(HttpContext context)
         {
-            _context = context;
-            _features = new FeatureReferences<FeatureInterfaces>(context.Features);
+            Initialize(context.Features, context.Features.Revision, FormOptions.Default);
+        }
+
+        private void Initialize(IFeatureCollection features, int revision, FormOptions formOptions)
+        {
+            _features = new FeatureReferences<FeatureInterfaces>(features, revision);
+            _formOptions = formOptions;
         }
 
         public virtual void Uninitialize()
         {
             _context = null;
+            _formOptions = null;
             _features = default(FeatureReferences<FeatureInterfaces>);
         }
 
@@ -47,7 +60,7 @@ namespace Microsoft.AspNetCore.Http.Internal
             _features.Fetch(ref _features.Cache.Query, _newQueryFeature);
 
         private IFormFeature FormFeature =>
-            _features.Fetch(ref _features.Cache.Form, this, _newFormFeature);
+            _features.Fetch(ref _features.Cache.Form, (this, _formOptions), _newFormFeature);
 
         private IRequestCookiesFeature RequestCookiesFeature =>
             _features.Fetch(ref _features.Cache.Cookies, _newRequestCookiesFeature);

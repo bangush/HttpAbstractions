@@ -24,7 +24,7 @@ namespace Microsoft.AspNetCore.Http
                 throw new ArgumentNullException(nameof(formOptions));
             }
 
-            _formOptions = formOptions.Value;
+            _formOptions = formOptions.Value ?? FormOptions.Default;
             _httpContextAccessor = httpContextAccessor;
         }
 
@@ -35,14 +35,11 @@ namespace Microsoft.AspNetCore.Http
                 throw new ArgumentNullException(nameof(featureCollection));
             }
 
-            var httpContext = new DefaultHttpContext(featureCollection);
+            var httpContext = new DefaultHttpContext(featureCollection, _formOptions);
             if (_httpContextAccessor != null)
             {
                 _httpContextAccessor.HttpContext = httpContext;
             }
-
-            var formFeature = new FormFeature(httpContext.Request, _formOptions);
-            featureCollection.Set<IFormFeature>(formFeature);
 
             return httpContext;
         }

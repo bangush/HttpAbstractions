@@ -15,6 +15,13 @@ namespace Microsoft.AspNetCore.Http.Features
             Revision = collection.Revision;
         }
 
+        public FeatureReferences(IFeatureCollection collection, int revision)
+        {
+            Collection = collection;
+            Cache = default(TCache);
+            Revision = revision;
+        }
+
         public IFeatureCollection Collection { get; private set; }
         public int Revision { get; private set; }
 

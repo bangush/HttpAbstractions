@@ -19,14 +19,25 @@ namespace Microsoft.AspNetCore.Http.Internal
         private FeatureReferences<FeatureInterfaces> _features;
 
         public DefaultHttpResponse(HttpContext context)
+            : this(context, context.Features.Revision, context.Features)
         {
-            Initialize(context);
+        }
+
+        internal DefaultHttpResponse(HttpContext context, int revision, IFeatureCollection features)
+        {
+            _context = context;
+            Initialize(features, revision);
         }
 
         public virtual void Initialize(HttpContext context)
         {
             _context = context;
-            _features = new FeatureReferences<FeatureInterfaces>(context.Features);
+            Initialize(context.Features, context.Features.Revision);
+        }
+
+        private void Initialize(IFeatureCollection features, int revision)
+        {
+            _features = new FeatureReferences<FeatureInterfaces>(features, revision);
         }
 
         public virtual void Uninitialize()
