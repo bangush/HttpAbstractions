@@ -180,7 +180,7 @@ namespace Microsoft.AspNetCore.Http
             newFeatures.Set<IHttpWebSocketFeature>(new TestHttpWebSocketFeature());
 
             // featurecollection is set to newFeatures. all cached interfaces are null.
-            context.Initialize(newFeatures, FormOptions.Default);
+            context.Initialize(newFeatures);
             // Trigger initalization
             Assert.NotNull(context.Request);
             TestAllCachedFeaturesAreNull(context, newFeatures);
