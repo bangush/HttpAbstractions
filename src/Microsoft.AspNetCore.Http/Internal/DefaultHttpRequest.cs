@@ -15,7 +15,7 @@ namespace Microsoft.AspNetCore.Http.Internal
         // Lambdas hoisted to static readonly fields to improve inlining https://github.com/dotnet/roslyn/issues/13624
         private readonly static Func<IFeatureCollection, IHttpRequestFeature> _nullRequestFeature = f => null;
         private readonly static Func<IFeatureCollection, IQueryFeature> _newQueryFeature = f => new QueryFeature(f);
-        private readonly static Func<(HttpRequest request, FormOptions options), IFormFeature> _newFormFeature = (r) => new FormFeature(r.request, r.options ?? FormOptions.Default);
+        private readonly static Func<HttpRequest, FormOptions, IFormFeature> _newFormFeature = (r, o) => new FormFeature(r, o ?? FormOptions.Default);
         private readonly static Func<IFeatureCollection, IRequestCookiesFeature> _newRequestCookiesFeature = f => new RequestCookiesFeature(f);
 
         private FormOptions _formOptions;
@@ -60,7 +60,7 @@ namespace Microsoft.AspNetCore.Http.Internal
             _features.Fetch(ref _features.Cache.Query, _newQueryFeature);
 
         private IFormFeature FormFeature =>
-            _features.Fetch(ref _features.Cache.Form, (this, _formOptions), _newFormFeature);
+            _features.Fetch(ref _features.Cache.Form, this, _formOptions, _newFormFeature);
 
         private IRequestCookiesFeature RequestCookiesFeature =>
             _features.Fetch(ref _features.Cache.Cookies, _newRequestCookiesFeature);

@@ -70,6 +70,26 @@ namespace Microsoft.AspNetCore.Http.Features
             return cached ?? UpdateCached(ref cached, state, factory, revision, flush);
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public TFeature Fetch<TFeature, TState1, TState2>(
+            ref TFeature cached,
+            TState1 state1,
+            TState2 state2,
+            Func<TState1, TState2, TFeature> factory) where TFeature : class
+        {
+            var flush = false;
+            var revision = Collection.Revision;
+            if (Revision != revision)
+            {
+                // Clear cached value to force call to UpdateCached
+                cached = null;
+                // Collection changed, clear whole feature cache
+                flush = true;
+            }
+
+            return cached ?? UpdateCached(ref cached, state1, state2, factory, revision, flush);
+        }
+
         // Update and cache clearing logic, when the fast-path in Fetch isn't applicable
         private TFeature UpdateCached<TFeature, TState>(ref TFeature cached, TState state, Func<TState, TFeature> factory, int revision, bool flush) where TFeature : class
         {
@@ -84,6 +104,35 @@ namespace Microsoft.AspNetCore.Http.Features
             {
                 // Item not in collection, create it with factory
                 cached = factory(state);
+                // Add item to IFeatureCollection
+                Collection.Set(cached);
+                // Revision changed by .Set, update revision to new value
+                Revision = Collection.Revision;
+            }
+            else if (flush)
+            {
+                // Cache was cleared, but item retrived from current Collection for version
+                // so use passed in revision rather than making another virtual call
+                Revision = revision;
+            }
+
+            return cached;
+        }
+
+        // Update and cache clearing logic, when the fast-path in Fetch isn't applicable
+        private TFeature UpdateCached<TFeature, TState1, TState2>(ref TFeature cached, TState1 state1, TState2 state2, Func<TState1, TState2, TFeature> factory, int revision, bool flush) where TFeature : class
+        {
+            if (flush)
+            {
+                // Collection detected as changed, clear cache
+                Cache = default(TCache);
+            }
+
+            cached = Collection.Get<TFeature>();
+            if (cached == null)
+            {
+                // Item not in collection, create it with factory
+                cached = factory(state1, state2);
                 // Add item to IFeatureCollection
                 Collection.Set(cached);
                 // Revision changed by .Set, update revision to new value
