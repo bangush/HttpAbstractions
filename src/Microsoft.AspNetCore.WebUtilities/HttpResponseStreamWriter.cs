@@ -6,6 +6,9 @@ using System.Buffers;
 using System.IO;
 using System.Text;
 using System.Threading.Tasks;
+using System.IO.Pipelines;
+using System.Threading;
+using System.Runtime.InteropServices;
 
 namespace Microsoft.AspNetCore.WebUtilities
 {
@@ -13,21 +16,15 @@ namespace Microsoft.AspNetCore.WebUtilities
     /// Writes to the <see cref="Stream"/> using the supplied <see cref="Encoding"/>.
     /// It does not write the BOM and also does not close the stream.
     /// </summary>
-    public class HttpResponseStreamWriter : TextWriter
+    public partial class HttpResponseStreamWriter : TextWriter
     {
         private const int MinBufferSize = 128;
         internal const int DefaultBufferSize = 16 * 1024;
 
-        private Stream _stream;
+        private readonly PipeWriter _pipe;
+        private readonly StreamWriter _streamWriter;
         private readonly Encoder _encoder;
-        private readonly ArrayPool<byte> _bytePool;
-        private readonly ArrayPool<char> _charPool;
-        private readonly int _charBufferSize;
 
-        private byte[] _byteBuffer;
-        private char[] _charBuffer;
-
-        private int _charBufferCount;
         private bool _disposed;
 
         public HttpResponseStreamWriter(Stream stream, Encoding encoding)
@@ -47,40 +44,41 @@ namespace Microsoft.AspNetCore.WebUtilities
             ArrayPool<byte> bytePool,
             ArrayPool<char> charPool)
         {
-            _stream = stream ?? throw new ArgumentNullException(nameof(stream));
+            if (stream == null)
+            {
+                throw new ArgumentNullException(nameof(stream));
+            }
+
             Encoding = encoding ?? throw new ArgumentNullException(nameof(encoding));
-            _bytePool = bytePool ?? throw new ArgumentNullException(nameof(bytePool));
-            _charPool = charPool ?? throw new ArgumentNullException(nameof(charPool));
+
+            if (bytePool == null)
+            {
+                throw new ArgumentNullException(nameof(bytePool));
+            }
+
+            if (charPool == null)
+            {
+                throw new ArgumentNullException(nameof(charPool));
+            }
 
             if (bufferSize <= 0)
             {
                 throw new ArgumentOutOfRangeException(nameof(bufferSize));
             }
-            if (!_stream.CanWrite)
+            if (!stream.CanWrite)
             {
                 throw new ArgumentException(Resources.HttpResponseStreamWriter_StreamNotWritable, nameof(stream));
             }
 
-            _charBufferSize = bufferSize;
-
-            _encoder = encoding.GetEncoder();
-            _charBuffer = charPool.Rent(bufferSize);
-
-            try
+            Encoding = encoding;
+            if (stream is IDuplexPipe pipe)
             {
-                var requiredLength = encoding.GetMaxByteCount(bufferSize);
-                _byteBuffer = bytePool.Rent(requiredLength);
+                _encoder = encoding.GetEncoder();
+                _pipe = pipe.Output;
             }
-            catch
+            else
             {
-                charPool.Return(_charBuffer);
-
-                if (_byteBuffer != null)
-                {
-                    bytePool.Return(_byteBuffer);
-                }
-
-                throw;
+                _streamWriter = new StreamWriter(stream, encoding, bufferSize, bytePool, charPool);
             }
         }
 
@@ -88,129 +86,234 @@ namespace Microsoft.AspNetCore.WebUtilities
 
         public override void Write(char value)
         {
-            if (_disposed)
-            {
-                throw new ObjectDisposedException(nameof(HttpResponseStreamWriter));
-            }
+            ThrowIfDisposed();
 
-            if (_charBufferCount == _charBufferSize)
+            if (_pipe != null)
             {
-                FlushInternal(flushEncoder: false);
+                WriteChar(value);
             }
-
-            _charBuffer[_charBufferCount] = value;
-            _charBufferCount++;
+            else
+            {
+                _streamWriter.Write(value);
+            }
         }
 
         public override void Write(char[] values, int index, int count)
         {
-            if (_disposed)
-            {
-                throw new ObjectDisposedException(nameof(HttpResponseStreamWriter));
-            }
+            ThrowIfDisposed();
 
             if (values == null)
             {
                 return;
             }
 
-            while (count > 0)
+            if (_pipe != null)
             {
-                if (_charBufferCount == _charBufferSize)
-                {
-                    FlushInternal(flushEncoder: false);
-                }
-
-                CopyToCharBuffer(values, ref index, ref count);
+                WriteSpan(values.AsReadOnlySpan());
+            }
+            else
+            {
+                _streamWriter.Write(values, index, count);
             }
         }
 
         public override void Write(string value)
         {
-            if (_disposed)
-            {
-                throw new ObjectDisposedException(nameof(HttpResponseStreamWriter));
-            }
+            ThrowIfDisposed();
 
             if (value == null)
             {
                 return;
             }
 
-            var count = value.Length;
-            var index = 0;
-            while (count > 0)
+            if (_pipe != null)
             {
-                if (_charBufferCount == _charBufferSize)
-                {
-                    FlushInternal(flushEncoder: false);
-                }
-
-                CopyToCharBuffer(value, ref index, ref count);
+                WriteSpan(value.AsReadOnlySpan());
+            }
+            else
+            {
+                _streamWriter.Write(value);
             }
         }
 
-        public override async Task WriteAsync(char value)
+#if NETCOREAPP2_1
+        public override void Write(ReadOnlySpan<char> buffer)
         {
-            if (_disposed)
+            ThrowIfDisposed();
+
+            if (buffer.Length == 0)
             {
-                throw new ObjectDisposedException(nameof(HttpResponseStreamWriter));
+                return;
             }
 
-            if (_charBufferCount == _charBufferSize)
+            if (_pipe != null)
             {
-                await FlushInternalAsync(flushEncoder: false);
+                WriteSpan(buffer);
             }
-
-            _charBuffer[_charBufferCount] = value;
-            _charBufferCount++;
+            else
+            {
+                _streamWriter.Write(buffer);
+            }
         }
 
-        public override async Task WriteAsync(char[] values, int index, int count)
+        public override void WriteLine(ReadOnlySpan<char> buffer)
         {
-            if (_disposed)
+            ThrowIfDisposed();
+
+            if (buffer.Length == 0)
             {
-                throw new ObjectDisposedException(nameof(HttpResponseStreamWriter));
+                Write(buffer);
             }
+
+            Write(CoreNewLine.AsReadOnlySpan());
+        }
+#endif
+
+        public override Task WriteAsync(char value)
+        {
+            ThrowIfDisposed();
+
+            if (_pipe != null)
+            {
+                WriteChar(value);
+                return _pipe.WriteAsync(default);
+            }
+            else
+            {
+                return _streamWriter.WriteAsync(value);
+            }
+        }
+
+        public override Task WriteAsync(char[] values, int index, int count)
+        {
+            ThrowIfDisposed();
 
             if (values == null)
             {
-                return;
+                return Task.CompletedTask;
             }
 
-            while (count > 0)
+            if (_pipe != null)
             {
-                if (_charBufferCount == _charBufferSize)
-                {
-                    await FlushInternalAsync(flushEncoder: false);
-                }
-
-                CopyToCharBuffer(values, ref index, ref count);
+                WriteSpan(new ReadOnlySpan<char>(values, index, count));
+                return _pipe.WriteAsync(default);
+            }
+            else
+            {
+                return _streamWriter.WriteAsync(values, index, count);
             }
         }
 
-        public override async Task WriteAsync(string value)
+        public override Task WriteAsync(string value)
         {
-            if (_disposed)
-            {
-                throw new ObjectDisposedException(nameof(HttpResponseStreamWriter));
-            }
+            ThrowIfDisposed();
 
             if (value == null)
             {
-                return;
+                return Task.CompletedTask;
             }
 
-            var count = value.Length;
-            var index = 0;
-            while (count > 0)
+            if (_pipe != null)
             {
-                if (_charBufferCount == _charBufferSize)
+                WriteSpan(value.AsReadOnlySpan());
+                return _pipe.WriteAsync(default);
+            }
+            else
+            {
+                return _streamWriter.WriteAsync(value);
+            }
+        }
+
+#if NETCOREAPP2_1
+        public override Task WriteAsync(ReadOnlyMemory<char> buffer, CancellationToken cancellationToken = default)
+        {
+            ThrowIfDisposed();
+
+            var span = buffer.Span;
+            if (span.Length == 0)
+            {
+                return Task.CompletedTask;
+            }
+
+            if (_pipe != null)
+            {
+                WriteSpan(span);
+                return _pipe.WriteAsync(default, cancellationToken);
+            }
+            else
+            {
+                return _streamWriter.WriteAsync(buffer, cancellationToken);
+            }
+        }
+
+        public override Task WriteLineAsync(ReadOnlyMemory<char> buffer, CancellationToken cancellationToken = default)
+        {
+            ThrowIfDisposed();
+
+            var span = buffer.Span;
+            if (span.Length == 0)
+            {
+                return Task.CompletedTask;
+            }
+
+            if (_pipe != null)
+            {
+                WriteSpan(span);
+                Write(CoreNewLine.AsReadOnlySpan());
+                return _pipe.WriteAsync(default, cancellationToken);
+            }
+            else
+            {
+                return _streamWriter.WriteAsync(buffer, cancellationToken);
+            }
+        }
+#endif
+
+        private unsafe void WriteChar(char value)
+        {
+            Span<byte> bytes = _pipe.GetSpan(Encoding.GetMaxByteCount(1));
+            int encoded;
+#if NETCOREAPP2_1
+            encoded = _encoder.GetBytes(new ReadOnlySpan<char>(&value, sizeof(char)), bytes, flush: false);
+#else
+            fixed (byte* pBytes = &MemoryMarshal.GetReference(bytes))
+            {
+                encoded = _encoder.GetBytes(&value, sizeof(char), pBytes, bytes.Length, flush: false);
+            }
+#endif
+            _pipe.Advance(encoded);
+        }
+
+        private unsafe void WriteSpan(ReadOnlySpan<char> input, bool flush = false)
+        {
+            int minBytes = Encoding.GetMaxCharCount(1);
+            while (input.Length > 0 || (flush && _encoder.FallbackBuffer.Remaining > 0))
+            {
+                Span<byte> bytes = _pipe.GetSpan(minBytes);
+                int totalEncoded = 0;
+                while (bytes.Length > 0)
                 {
-                    await FlushInternalAsync(flushEncoder: false);
+                    int toEncode = Math.Min(Encoding.GetMaxCharCount(bytes.Length), input.Length);
+                    int encoded;
+#if NETCOREAPP2_1
+                    encoded = _encoder.GetBytes(input.Slice(0, toEncode), bytes, flush: flush);
+#else
+                    fixed (char* pChars = &MemoryMarshal.GetReference(input))
+                    fixed (byte* pBytes = &MemoryMarshal.GetReference(bytes))
+                    {
+                        encoded = _encoder.GetBytes(pChars, toEncode, pBytes, bytes.Length, flush: flush);
+                    }
+#endif
+                    input = input.Slice(toEncode);
+                    bytes = bytes.Slice(encoded);
+                    totalEncoded += encoded;
+                    if (bytes.Length < minBytes)
+                    {
+                        break;
+                    }
                 }
 
-                CopyToCharBuffer(value, ref index, ref count);
+                _pipe.Advance(totalEncoded);
             }
         }
 
@@ -219,122 +322,73 @@ namespace Microsoft.AspNetCore.WebUtilities
 
         public override void Flush()
         {
-            if (_disposed)
-            {
-                throw new ObjectDisposedException(nameof(HttpResponseStreamWriter));
-            }
+            ThrowIfDisposed();
 
-            FlushInternal(flushEncoder: true);
+            if (_pipe != null)
+            {
+                if (_encoder.FallbackBuffer.Remaining > 0)
+                {
+                    WriteSpan(default, flush: true);
+                }
+
+                _pipe.FlushAsync().GetAwaiter().GetResult();
+            }
+            else
+            {
+                _streamWriter.Flush();
+            }
         }
 
-        public override Task FlushAsync()
+        public async override Task FlushAsync()
         {
-            if (_disposed)
-            {
-                throw new ObjectDisposedException(nameof(HttpResponseStreamWriter));
-            }
+            ThrowIfDisposed();
 
-            return FlushInternalAsync(flushEncoder: true);
+            if (_pipe != null)
+            {
+                if (_encoder.FallbackBuffer.Remaining > 0)
+                {
+                    WriteSpan(default, flush: true);
+                }
+
+                await _pipe.FlushAsync();
+            }
+            else
+            {
+                await _streamWriter.FlushAsync();
+            }
         }
 
         protected override void Dispose(bool disposing)
         {
             if (disposing && !_disposed)
             {
+
+                if (_pipe != null)
+                {
+                    if (_encoder.FallbackBuffer.Remaining > 0)
+                    {
+                        Flush();
+                    }
+                }
+                else
+                {
+                    _streamWriter.ParentDispose(disposing);
+                }
+
                 _disposed = true;
-                try
-                {
-                    FlushInternal(flushEncoder: true);
-                }
-                finally
-                {
-                    _bytePool.Return(_byteBuffer);
-                    _charPool.Return(_charBuffer);
-                }
             }
 
             base.Dispose(disposing);
         }
 
-        // Note: our FlushInternal method does NOT flush the underlying stream. This would result in
-        // chunking.
-        private void FlushInternal(bool flushEncoder)
+        private void ThrowIfDisposed()
         {
-            if (_charBufferCount == 0)
+            if (_disposed)
             {
-                return;
-            }
-
-            var count = _encoder.GetBytes(
-                _charBuffer,
-                0,
-                _charBufferCount,
-                _byteBuffer,
-                0,
-                flush: flushEncoder);
-
-            _charBufferCount = 0;
-
-            if (count > 0)
-            {
-                _stream.Write(_byteBuffer, 0, count);
+                ThrowDisposed();
             }
         }
 
-        // Note: our FlushInternalAsync method does NOT flush the underlying stream. This would result in
-        // chunking.
-        private async Task FlushInternalAsync(bool flushEncoder)
-        {
-            if (_charBufferCount == 0)
-            {
-                return;
-            }
-
-            var count = _encoder.GetBytes(
-                _charBuffer,
-                0,
-                _charBufferCount,
-                _byteBuffer,
-                0,
-                flush: flushEncoder);
-
-            _charBufferCount = 0;
-
-            if (count > 0)
-            {
-                await _stream.WriteAsync(_byteBuffer, 0, count);
-            }
-        }
-
-        private void CopyToCharBuffer(string value, ref int index, ref int count)
-        {
-            var remaining = Math.Min(_charBufferSize - _charBufferCount, count);
-
-            value.CopyTo(
-                sourceIndex: index,
-                destination: _charBuffer,
-                destinationIndex: _charBufferCount,
-                count: remaining);
-
-            _charBufferCount += remaining;
-            index += remaining;
-            count -= remaining;
-        }
-
-        private void CopyToCharBuffer(char[] values, ref int index, ref int count)
-        {
-            var remaining = Math.Min(_charBufferSize - _charBufferCount, count);
-
-            Buffer.BlockCopy(
-                src: values,
-                srcOffset: index * sizeof(char),
-                dst: _charBuffer,
-                dstOffset: _charBufferCount * sizeof(char),
-                count: remaining * sizeof(char));
-
-            _charBufferCount += remaining;
-            index += remaining;
-            count -= remaining;
-        }
+        private void ThrowDisposed() => throw new ObjectDisposedException(nameof(HttpResponseStreamWriter));
     }
 }
