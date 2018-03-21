@@ -74,7 +74,7 @@ namespace Microsoft.AspNetCore.Http
                 }
                 ThrowIfReadOnly();
 
-                if (StringValues.IsNullOrEmpty(value))
+                if (value.ToString().Length == 0)
                 {
                     Store?.Remove(key);
                 }
@@ -177,8 +177,11 @@ namespace Microsoft.AspNetCore.Http
                 throw new ArgumentNullException("The key is null");
             }
             ThrowIfReadOnly();
-            EnsureStore(1);
-            Store.Add(item.Key, item.Value);
+            if (item.Value.ToString().Length > 0)
+            {
+                EnsureStore(1);
+                Store.Add(item.Key, item.Value);
+            }
         }
 
         /// <summary>
@@ -193,8 +196,11 @@ namespace Microsoft.AspNetCore.Http
                 throw new ArgumentNullException(nameof(key));
             }
             ThrowIfReadOnly();
-            EnsureStore(1);
-            Store.Add(key, value);
+            if (value.ToString().Length > 0)
+            {
+                EnsureStore(1);
+                Store.Add(key, value);
+            }
         }
 
         /// <summary>
