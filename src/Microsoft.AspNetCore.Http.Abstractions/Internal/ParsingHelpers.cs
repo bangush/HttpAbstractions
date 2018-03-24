@@ -153,7 +153,7 @@ namespace Microsoft.AspNetCore.Http.Internal
                 throw new ArgumentNullException(nameof(key));
             }
 
-            if (values.Count == 0)
+            if (values.IsNull)
             {
                 return;
             }
