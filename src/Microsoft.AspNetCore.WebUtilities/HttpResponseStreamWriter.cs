@@ -231,8 +231,13 @@ namespace Microsoft.AspNetCore.WebUtilities
                 return GetObjectDisposedTask();
             }
 
+            if (value == null)
+            {
+                return Task.CompletedTask;
+            }
+
             var count = value.Length;
-            if (value == null || count == 0)
+            if (count == 0)
             {
                 return Task.CompletedTask;
             }
