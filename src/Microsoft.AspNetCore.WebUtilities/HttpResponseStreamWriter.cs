@@ -255,7 +255,7 @@ namespace Microsoft.AspNetCore.WebUtilities
             var count = value.Length;
 
             Debug.Assert(count > 0);
-            Debug.Assert(_charBufferSize - _charBufferCount > count);
+            Debug.Assert(_charBufferSize - _charBufferCount < count);
 
             var index = 0;
             while (count > 0)
